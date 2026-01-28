@@ -8,13 +8,64 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    <div id="onboardingModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-icon">
+                    <i class="fas fa-tractor"></i>
+                </div>
+                <h2>Welcome to AgriAdvisor Board</h2>
+                <p>Set up your farm profile to get personalized advice from our AI advisory board</p>
+            </div>
+            
+            <form id="profileForm">
+                <div class="form-group">
+                    <label for="farmName">Farm Name (Optional)</label>
+                    <input type="text" id="farmName" placeholder="e.g., Green Valley Farm">
+                </div>
+                
+                <div class="form-group">
+                    <label for="stateSelect">State <span class="required">*</span></label>
+                    <select id="stateSelect" required>
+                        <option value="">Select your state...</option>
+                        {% for state in states %}
+                        <option value="{{ state }}">{{ state }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Crops & Products <span class="required">*</span></label>
+                    <p class="form-hint">Select all that apply to your operation</p>
+                    <div class="crops-grid" id="cropsGrid">
+                        {% for crop in crops %}
+                        <label class="crop-checkbox">
+                            <input type="checkbox" name="crops" value="{{ crop }}">
+                            <span>{{ crop }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <button type="submit" class="submit-btn">
+                    <i class="fas fa-arrow-right"></i> Start Getting Advice
+                </button>
+            </form>
+        </div>
+    </div>
+
     <div class="app-container">
         <header class="header">
             <div class="logo">
                 <i class="fas fa-tractor"></i>
                 <h1>AgriAdvisor Board</h1>
             </div>
-            <p class="tagline">Your AI-Powered Agricultural Advisory Team</p>
+            <div class="header-right">
+                <button class="profile-btn" id="editProfileBtn" title="Edit Profile">
+                    <i class="fas fa-user-cog"></i>
+                    <span id="profileSummary">Set up profile</span>
+                </button>
+            </div>
         </header>
 
         <div class="main-content">
@@ -61,6 +112,7 @@
                             <li><i class="fas fa-check"></i> Operations optimization and logistics</li>
                             <li><i class="fas fa-check"></i> Marketing strategies and sales growth</li>
                             <li><i class="fas fa-check"></i> Sustainability practices and certifications</li>
+                            <li><i class="fas fa-check"></i> Federal and state agricultural regulations</li>
                         </ul>
                     </div>
                 </div>
@@ -87,7 +139,10 @@
         const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
         let currentAdvisor = 'agronomist';
         let isLoading = false;
+        let userProfile = null;
 
+        const modal = document.getElementById('onboardingModal');
+        const profileForm = document.getElementById('profileForm');
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');
         const chatForm = document.getElementById('chatForm');
@@ -95,6 +150,8 @@
         const clearBtn = document.getElementById('clearChat');
         const currentAdvisorName = document.getElementById('currentAdvisorName');
         const currentAdvisorTitle = document.getElementById('currentAdvisorTitle');
+        const editProfileBtn = document.getElementById('editProfileBtn');
+        const profileSummary = document.getElementById('profileSummary');
 
         const advisorData = {
             {% for id, advisor in advisors.items() %}
@@ -106,6 +163,94 @@
             },
             {% endfor %}
         };
+
+        function showModal() {
+            modal.style.display = 'flex';
+        }
+
+        function hideModal() {
+            modal.style.display = 'none';
+        }
+
+        function updateProfileSummary() {
+            if (userProfile && userProfile.state) {
+                let summary = userProfile.state;
+                if (userProfile.crops && userProfile.crops.length > 0) {
+                    summary += ` - ${userProfile.crops.length} crop${userProfile.crops.length > 1 ? 's' : ''}`;
+                }
+                profileSummary.textContent = summary;
+            } else {
+                profileSummary.textContent = 'Set up profile';
+            }
+        }
+
+        profileForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const farmName = document.getElementById('farmName').value;
+            const state = document.getElementById('stateSelect').value;
+            const cropCheckboxes = document.querySelectorAll('input[name="crops"]:checked');
+            const crops = Array.from(cropCheckboxes).map(cb => cb.value);
+            
+            if (!state) {
+                alert('Please select your state');
+                return;
+            }
+            
+            if (crops.length === 0) {
+                alert('Please select at least one crop or product');
+                return;
+            }
+            
+            userProfile = { farm_name: farmName, state, crops };
+            
+            try {
+                await fetch('/api/profile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        ...userProfile
+                    })
+                });
+                
+                updateProfileSummary();
+                hideModal();
+                
+                localStorage.setItem('agriAdvisorProfile', JSON.stringify(userProfile));
+            } catch (error) {
+                console.error('Error saving profile:', error);
+            }
+        });
+
+        editProfileBtn.addEventListener('click', () => {
+            if (userProfile) {
+                document.getElementById('farmName').value = userProfile.farm_name || '';
+                document.getElementById('stateSelect').value = userProfile.state || '';
+                
+                document.querySelectorAll('input[name="crops"]').forEach(cb => {
+                    cb.checked = userProfile.crops && userProfile.crops.includes(cb.value);
+                });
+            }
+            showModal();
+        });
+
+        const savedProfile = localStorage.getItem('agriAdvisorProfile');
+        if (savedProfile) {
+            userProfile = JSON.parse(savedProfile);
+            updateProfileSummary();
+            
+            fetch('/api/profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    ...userProfile
+                })
+            });
+        } else {
+            showModal();
+        }
 
         advisorCards.forEach(card => {
             card.addEventListener('click', () => {
