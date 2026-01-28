@@ -35,8 +35,21 @@
                 </div>
                 
                 <div class="form-group">
-                    <label>Crops & Products <span class="required">*</span></label>
-                    <p class="form-hint">Select all that apply to your operation</p>
+                    <label>Livestock</label>
+                    <p class="form-hint">Select all livestock types in your operation (if applicable)</p>
+                    <div class="crops-grid" id="livestockGrid">
+                        {% for animal in livestock %}
+                        <label class="crop-checkbox">
+                            <input type="checkbox" name="livestock" value="{{ animal }}">
+                            <span>{{ animal }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Crops & Products</label>
+                    <p class="form-hint">Select all crops you grow (if applicable)</p>
                     <div class="crops-grid" id="cropsGrid">
                         {% for crop in crops %}
                         <label class="crop-checkbox">
@@ -46,6 +59,8 @@
                         {% endfor %}
                     </div>
                 </div>
+                
+                <p class="form-hint" style="margin-top: -0.5rem; margin-bottom: 1rem; color: #c44;">* Please select at least one livestock or crop option</p>
                 
                 <button type="submit" class="submit-btn">
                     <i class="fas fa-arrow-right"></i> Start Getting Advice
@@ -175,8 +190,15 @@
         function updateProfileSummary() {
             if (userProfile && userProfile.state) {
                 let summary = userProfile.state;
+                let items = [];
+                if (userProfile.livestock && userProfile.livestock.length > 0) {
+                    items.push(`${userProfile.livestock.length} livestock`);
+                }
                 if (userProfile.crops && userProfile.crops.length > 0) {
-                    summary += ` - ${userProfile.crops.length} crop${userProfile.crops.length > 1 ? 's' : ''}`;
+                    items.push(`${userProfile.crops.length} crop${userProfile.crops.length > 1 ? 's' : ''}`);
+                }
+                if (items.length > 0) {
+                    summary += ` - ${items.join(', ')}`;
                 }
                 profileSummary.textContent = summary;
             } else {
@@ -189,6 +211,8 @@
             
             const farmName = document.getElementById('farmName').value;
             const state = document.getElementById('stateSelect').value;
+            const livestockCheckboxes = document.querySelectorAll('input[name="livestock"]:checked');
+            const livestock = Array.from(livestockCheckboxes).map(cb => cb.value);
             const cropCheckboxes = document.querySelectorAll('input[name="crops"]:checked');
             const crops = Array.from(cropCheckboxes).map(cb => cb.value);
             
@@ -197,12 +221,12 @@
                 return;
             }
             
-            if (crops.length === 0) {
-                alert('Please select at least one crop or product');
+            if (crops.length === 0 && livestock.length === 0) {
+                alert('Please select at least one livestock or crop option');
                 return;
             }
             
-            userProfile = { farm_name: farmName, state, crops };
+            userProfile = { farm_name: farmName, state, livestock, crops };
             
             try {
                 await fetch('/api/profile', {
@@ -228,6 +252,9 @@
                 document.getElementById('farmName').value = userProfile.farm_name || '';
                 document.getElementById('stateSelect').value = userProfile.state || '';
                 
+                document.querySelectorAll('input[name="livestock"]').forEach(cb => {
+                    cb.checked = userProfile.livestock && userProfile.livestock.includes(cb.value);
+                });
                 document.querySelectorAll('input[name="crops"]').forEach(cb => {
                     cb.checked = userProfile.crops && userProfile.crops.includes(cb.value);
                 });

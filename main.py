@@ -23,14 +23,20 @@ US_STATES = [
     "West Virginia", "Wisconsin", "Wyoming"
 ]
 
+LIVESTOCK_OPTIONS = [
+    "Beef Cattle", "Dairy Cattle", "Hogs/Pigs", "Poultry - Broilers",
+    "Poultry - Layers", "Poultry - Turkeys", "Sheep", "Goats - Meat",
+    "Goats - Dairy", "Horses", "Bison/Buffalo", "Alpacas/Llamas",
+    "Rabbits", "Fish/Aquaculture", "Bees/Apiary", "Other Livestock"
+]
+
 COMMON_CROPS = [
     "Corn", "Soybeans", "Wheat", "Cotton", "Hay/Alfalfa", "Rice",
     "Sorghum", "Barley", "Oats", "Potatoes", "Tomatoes", "Lettuce",
     "Onions", "Carrots", "Apples", "Grapes", "Oranges", "Strawberries",
     "Blueberries", "Almonds", "Pecans", "Walnuts", "Peanuts",
     "Sunflowers", "Canola", "Sugar Beets", "Sugarcane", "Tobacco",
-    "Hemp", "Hops", "Vegetables (Mixed)", "Fruits (Mixed)", "Cattle/Livestock",
-    "Dairy", "Poultry", "Hogs/Pigs", "Sheep/Goats", "Other"
+    "Hemp", "Hops", "Vegetables (Mixed)", "Fruits (Mixed)", "Other Crops"
 ]
 
 def get_advisor_system_prompt(advisor_key, user_profile=None):
@@ -104,6 +110,7 @@ Provide clear, practical legal guidance while noting that you are providing gene
     if user_profile:
         state = user_profile.get('state', '')
         crops = user_profile.get('crops', [])
+        livestock = user_profile.get('livestock', [])
         farm_name = user_profile.get('farm_name', '')
         
         context = f"\n\nIMPORTANT CONTEXT ABOUT THIS FARMER:\n"
@@ -111,13 +118,21 @@ Provide clear, practical legal guidance while noting that you are providing gene
             context += f"- Farm Name: {farm_name}\n"
         if state:
             context += f"- Location: {state}\n"
+        if livestock:
+            context += f"- Livestock: {', '.join(livestock)}\n"
         if crops:
             context += f"- Crops/Products: {', '.join(crops)}\n"
         
         context += "\nTailor all your advice specifically to their location, crops, and conditions. Reference relevant state-specific regulations, climate considerations, and market conditions when applicable."
         
         if advisor_key == "legal" and state:
-            context += f"\n\nPay special attention to {state} agricultural laws, water rights, labor regulations, and any state-specific programs or restrictions that apply to their crops: {', '.join(crops) if crops else 'their farming operation'}."
+            operations = []
+            if livestock:
+                operations.append(f"livestock ({', '.join(livestock)})")
+            if crops:
+                operations.append(f"crops ({', '.join(crops)})")
+            operations_str = ' and '.join(operations) if operations else 'their farming operation'
+            context += f"\n\nPay special attention to {state} agricultural laws, water rights, labor regulations, and any state-specific programs or restrictions that apply to their {operations_str}."
         
         base += context
     
@@ -167,7 +182,7 @@ user_profiles = {}
 
 @app.route('/')
 def index():
-    return render_template('index.html', advisors=ADVISORS, states=US_STATES, crops=COMMON_CROPS)
+    return render_template('index.html', advisors=ADVISORS, states=US_STATES, livestock=LIVESTOCK_OPTIONS, crops=COMMON_CROPS)
 
 @app.route('/api/profile', methods=['POST'])
 def save_profile():
@@ -177,6 +192,7 @@ def save_profile():
     user_profiles[session_id] = {
         'farm_name': data.get('farm_name', ''),
         'state': data.get('state', ''),
+        'livestock': data.get('livestock', []),
         'crops': data.get('crops', [])
     }
     
