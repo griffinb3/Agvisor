@@ -1,0 +1,467 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary-green: #2d5a27;
+    --light-green: #4a7c44;
+    --accent-gold: #c9a227;
+    --bg-cream: #f5f3e8;
+    --bg-white: #ffffff;
+    --text-dark: #333333;
+    --text-muted: #666666;
+    --border-color: #e0ddd4;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, var(--bg-cream) 0%, #e8e6dc 100%);
+    min-height: 100vh;
+    color: var(--text-dark);
+}
+
+.app-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    background: var(--primary-green);
+    color: white;
+    padding: 1rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.logo i {
+    font-size: 2rem;
+    color: var(--accent-gold);
+}
+
+.logo h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.tagline {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9rem;
+}
+
+.main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.sidebar {
+    width: 320px;
+    background: var(--bg-white);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem;
+}
+
+.sidebar h2 {
+    font-size: 1rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 1rem;
+}
+
+.advisor-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.advisor-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-white);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    width: 100%;
+}
+
+.advisor-card:hover {
+    border-color: var(--light-green);
+    background: rgba(74, 124, 68, 0.05);
+}
+
+.advisor-card.active {
+    border-color: var(--primary-green);
+    background: rgba(45, 90, 39, 0.1);
+}
+
+.advisor-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--primary-green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.advisor-icon i {
+    color: white;
+    font-size: 1.2rem;
+}
+
+.advisor-card.active .advisor-icon {
+    background: var(--accent-gold);
+}
+
+.advisor-info h3 {
+    font-size: 0.95rem;
+    color: var(--text-dark);
+    margin-bottom: 0.25rem;
+}
+
+.advisor-info .title {
+    font-size: 0.8rem;
+    color: var(--primary-green);
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.advisor-info .specialty {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.clear-btn {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.clear-btn:hover {
+    background: #fee;
+    border-color: #e88;
+    color: #c44;
+}
+
+.chat-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-cream);
+}
+
+.chat-header {
+    padding: 1rem 1.5rem;
+    background: var(--bg-white);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.current-advisor {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.current-advisor strong {
+    color: var(--primary-green);
+    margin: 0 0.25rem;
+}
+
+.advisor-title {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.welcome-message {
+    text-align: center;
+    padding: 3rem 2rem;
+    max-width: 600px;
+    margin: auto;
+}
+
+.welcome-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--primary-green);
+    margin: 0 auto 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.welcome-icon i {
+    font-size: 2.5rem;
+    color: var(--accent-gold);
+}
+
+.welcome-message h2 {
+    color: var(--primary-green);
+    margin-bottom: 1rem;
+}
+
+.welcome-message p {
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+}
+
+.welcome-message ul {
+    list-style: none;
+    text-align: left;
+    display: inline-block;
+}
+
+.welcome-message li {
+    padding: 0.5rem 0;
+    color: var(--text-dark);
+}
+
+.welcome-message li i {
+    color: var(--light-green);
+    margin-right: 0.75rem;
+}
+
+.message {
+    max-width: 80%;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.user-message {
+    align-self: flex-end;
+}
+
+.assistant-message {
+    align-self: flex-start;
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.user-message .message-header {
+    justify-content: flex-end;
+    color: var(--text-muted);
+}
+
+.assistant-message .message-header {
+    color: var(--primary-green);
+}
+
+.assistant-message .message-header i {
+    color: var(--accent-gold);
+}
+
+.message-content {
+    padding: 1rem 1.25rem;
+    border-radius: 16px;
+    line-height: 1.6;
+}
+
+.user-message .message-content {
+    background: var(--primary-green);
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.assistant-message .message-content {
+    background: var(--bg-white);
+    color: var(--text-dark);
+    border-bottom-left-radius: 4px;
+    box-shadow: var(--shadow);
+}
+
+.error-message .message-content {
+    background: #fee;
+    color: #c44;
+    border: 1px solid #fcc;
+}
+
+.typing-indicator {
+    display: flex;
+    gap: 4px;
+    padding: 0.5rem 0;
+}
+
+.typing-indicator span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--light-green);
+    animation: bounce 1.4s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.typing-indicator span:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+@keyframes bounce {
+    0%, 80%, 100% {
+        transform: scale(0);
+    }
+    40% {
+        transform: scale(1);
+    }
+}
+
+.chat-input-area {
+    padding: 1rem 1.5rem;
+    background: var(--bg-white);
+    border-top: 1px solid var(--border-color);
+}
+
+.input-wrapper {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-end;
+}
+
+#messageInput {
+    flex: 1;
+    padding: 0.875rem 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 24px;
+    font-size: 1rem;
+    resize: none;
+    font-family: inherit;
+    line-height: 1.4;
+    max-height: 150px;
+    transition: border-color 0.2s ease;
+}
+
+#messageInput:focus {
+    outline: none;
+    border-color: var(--light-green);
+}
+
+#sendBtn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--primary-green);
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#sendBtn:hover {
+    background: var(--light-green);
+    transform: scale(1.05);
+}
+
+#sendBtn i {
+    font-size: 1.1rem;
+}
+
+@media (max-width: 900px) {
+    .main-content {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        max-height: 200px;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .advisor-list {
+        flex-direction: row;
+        overflow-x: auto;
+    }
+
+    .advisor-card {
+        min-width: 200px;
+        flex-shrink: 0;
+    }
+
+    .message {
+        max-width: 90%;
+    }
+
+    .header {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 600px) {
+    .advisor-info .title,
+    .advisor-info .specialty {
+        display: none;
+    }
+
+    .advisor-card {
+        min-width: 150px;
+        padding: 0.75rem;
+    }
+
+    .advisor-icon {
+        width: 40px;
+        height: 40px;
+    }
+}

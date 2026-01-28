@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgriAdvisor Board - AI Advisory for Agricultural Businesses</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-tractor"></i>
+                <h1>AgriAdvisor Board</h1>
+            </div>
+            <p class="tagline">Your AI-Powered Agricultural Advisory Team</p>
+        </header>
+
+        <div class="main-content">
+            <aside class="sidebar">
+                <h2>Your Advisory Board</h2>
+                <div class="advisor-list">
+                    {% for id, advisor in advisors.items() %}
+                    <button class="advisor-card {% if loop.first %}active{% endif %}" data-advisor="{{ id }}">
+                        <div class="advisor-icon">
+                            <i class="fas fa-{{ advisor.icon }}"></i>
+                        </div>
+                        <div class="advisor-info">
+                            <h3>{{ advisor.name }}</h3>
+                            <p class="title">{{ advisor.title }}</p>
+                            <p class="specialty">{{ advisor.specialty }}</p>
+                        </div>
+                    </button>
+                    {% endfor %}
+                </div>
+                <button class="clear-btn" id="clearChat">
+                    <i class="fas fa-trash-alt"></i> Clear Conversation
+                </button>
+            </aside>
+
+            <main class="chat-area">
+                <div class="chat-header">
+                    <div class="current-advisor">
+                        <span>Speaking with: </span>
+                        <strong id="currentAdvisorName">Dr. Sarah Chen</strong>
+                        <span class="advisor-title" id="currentAdvisorTitle">Chief Agronomist</span>
+                    </div>
+                </div>
+
+                <div class="chat-messages" id="chatMessages">
+                    <div class="welcome-message">
+                        <div class="welcome-icon">
+                            <i class="fas fa-seedling"></i>
+                        </div>
+                        <h2>Welcome to Your Agricultural Advisory Board</h2>
+                        <p>Select an advisor from the left panel and ask any question about your agricultural business. Our AI-powered experts are here to help with:</p>
+                        <ul>
+                            <li><i class="fas fa-check"></i> Crop planning and soil management</li>
+                            <li><i class="fas fa-check"></i> Financial planning and investment decisions</li>
+                            <li><i class="fas fa-check"></i> Operations optimization and logistics</li>
+                            <li><i class="fas fa-check"></i> Marketing strategies and sales growth</li>
+                            <li><i class="fas fa-check"></i> Sustainability practices and certifications</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="chat-input-area">
+                    <form id="chatForm">
+                        <div class="input-wrapper">
+                            <textarea 
+                                id="messageInput" 
+                                placeholder="Ask your agricultural advisor a question..."
+                                rows="1"
+                            ></textarea>
+                            <button type="submit" id="sendBtn">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+        let currentAdvisor = 'agronomist';
+        let isLoading = false;
+
+        const chatMessages = document.getElementById('chatMessages');
+        const messageInput = document.getElementById('messageInput');
+        const chatForm = document.getElementById('chatForm');
+        const advisorCards = document.querySelectorAll('.advisor-card');
+        const clearBtn = document.getElementById('clearChat');
+        const currentAdvisorName = document.getElementById('currentAdvisorName');
+        const currentAdvisorTitle = document.getElementById('currentAdvisorTitle');
+
+        const advisorData = {
+            {% for id, advisor in advisors.items() %}
+            '{{ id }}': {
+                name: '{{ advisor.name }}',
+                title: '{{ advisor.title }}',
+                specialty: '{{ advisor.specialty }}',
+                icon: '{{ advisor.icon }}'
+            },
+            {% endfor %}
+        };
+
+        advisorCards.forEach(card => {
+            card.addEventListener('click', () => {
+                advisorCards.forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+                currentAdvisor = card.dataset.advisor;
+                
+                const advisor = advisorData[currentAdvisor];
+                currentAdvisorName.textContent = advisor.name;
+                currentAdvisorTitle.textContent = advisor.title;
+            });
+        });
+
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+        });
+
+        messageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                chatForm.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const message = messageInput.value.trim();
+            if (!message || isLoading) return;
+
+            const welcomeMsg = chatMessages.querySelector('.welcome-message');
+            if (welcomeMsg) {
+                welcomeMsg.remove();
+            }
+
+            addMessage(message, 'user');
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+
+            isLoading = true;
+            const loadingId = addLoadingMessage();
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        advisor: currentAdvisor,
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+                
+                removeLoadingMessage(loadingId);
+
+                if (data.error) {
+                    addMessage('Sorry, there was an error processing your request. Please try again.', 'error');
+                } else {
+                    addMessage(data.response, 'assistant', data.advisor);
+                }
+            } catch (error) {
+                removeLoadingMessage(loadingId);
+                addMessage('Sorry, there was a connection error. Please try again.', 'error');
+            }
+
+            isLoading = false;
+        });
+
+        clearBtn.addEventListener('click', async () => {
+            try {
+                await fetch('/api/clear', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        advisor: currentAdvisor
+                    })
+                });
+
+                chatMessages.innerHTML = `
+                    <div class="welcome-message">
+                        <div class="welcome-icon">
+                            <i class="fas fa-seedling"></i>
+                        </div>
+                        <h2>Conversation Cleared</h2>
+                        <p>Start a new conversation with your agricultural advisors.</p>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error clearing chat:', error);
+            }
+        });
+
+        function addMessage(content, type, advisor = null) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+
+            if (type === 'assistant' && advisor) {
+                const advisorInfo = advisorData[currentAdvisor];
+                messageDiv.innerHTML = `
+                    <div class="message-header">
+                        <i class="fas fa-${advisorInfo.icon}"></i>
+                        <span class="advisor-name">${advisor.name}</span>
+                    </div>
+                    <div class="message-content">${formatMessage(content)}</div>
+                `;
+            } else if (type === 'user') {
+                messageDiv.innerHTML = `
+                    <div class="message-header">
+                        <i class="fas fa-user"></i>
+                        <span>You</span>
+                    </div>
+                    <div class="message-content">${escapeHtml(content)}</div>
+                `;
+            } else {
+                messageDiv.innerHTML = `<div class="message-content">${escapeHtml(content)}</div>`;
+            }
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function addLoadingMessage() {
+            const id = 'loading_' + Date.now();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant-message loading';
+            messageDiv.id = id;
+            
+            const advisorInfo = advisorData[currentAdvisor];
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <i class="fas fa-${advisorInfo.icon}"></i>
+                    <span class="advisor-name">${advisorInfo.name}</span>
+                </div>
+                <div class="message-content">
+                    <div class="typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            `;
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return id;
+        }
+
+        function removeLoadingMessage(id) {
+            const loadingMsg = document.getElementById(id);
+            if (loadingMsg) {
+                loadingMsg.remove();
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatMessage(text) {
+            let formatted = escapeHtml(text);
+            formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            formatted = formatted.replace(/\n/g, '<br>');
+            return formatted;
+        }
+    </script>
+</body>
+</html>
