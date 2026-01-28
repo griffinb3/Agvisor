@@ -36,37 +36,17 @@
                 
                 <div class="form-group">
                     <label>Livestock</label>
-                    <p class="form-hint">Select all livestock types in your operation (if applicable)</p>
-                    <div class="crops-grid" id="livestockGrid">
-                        {% for animal in livestock %}
-                        <label class="crop-checkbox">
-                            <input type="checkbox" name="livestock" value="{{ animal }}">
-                            <span>{{ animal }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                    <div class="custom-input-wrapper">
-                        <input type="text" id="customLivestock" placeholder="Add other livestock (comma separated)">
-                    </div>
+                    <p class="form-hint">Enter the livestock you raise (comma separated)</p>
+                    <input type="text" id="livestockInput" placeholder="e.g., Beef Cattle, Dairy Cattle, Chickens">
                 </div>
 
                 <div class="form-group">
                     <label>Crops & Products</label>
-                    <p class="form-hint">Select all crops you grow (if applicable)</p>
-                    <div class="crops-grid" id="cropsGrid">
-                        {% for crop in crops %}
-                        <label class="crop-checkbox">
-                            <input type="checkbox" name="crops" value="{{ crop }}">
-                            <span>{{ crop }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                    <div class="custom-input-wrapper">
-                        <input type="text" id="customCrops" placeholder="Add other crops (comma separated)">
-                    </div>
+                    <p class="form-hint">Enter the crops you grow (comma separated)</p>
+                    <input type="text" id="cropsInput" placeholder="e.g., Corn, Soybeans, Wheat">
                 </div>
                 
-                <p class="form-hint" style="margin-top: -0.5rem; margin-bottom: 1rem; color: #c44;">* Please select or enter at least one livestock or crop</p>
+                <p class="form-hint" style="margin-top: -0.5rem; margin-bottom: 1rem; color: #c44;">* Please enter at least one livestock or crop</p>
                 
                 <button type="submit" class="submit-btn">
                     <i class="fas fa-arrow-right"></i> Start Getting Advice
@@ -216,21 +196,11 @@
             const farmName = document.getElementById('farmName').value;
             const state = document.getElementById('stateSelect').value;
             
-            const livestockCheckboxes = document.querySelectorAll('input[name="livestock"]:checked');
-            let livestock = Array.from(livestockCheckboxes).map(cb => cb.value);
-            const customLivestock = document.getElementById('customLivestock').value.trim();
-            if (customLivestock) {
-                const customItems = customLivestock.split(',').map(s => s.trim()).filter(s => s);
-                livestock = [...livestock, ...customItems];
-            }
+            const livestockInput = document.getElementById('livestockInput').value.trim();
+            const livestock = livestockInput ? livestockInput.split(',').map(s => s.trim()).filter(s => s) : [];
             
-            const cropCheckboxes = document.querySelectorAll('input[name="crops"]:checked');
-            let crops = Array.from(cropCheckboxes).map(cb => cb.value);
-            const customCrops = document.getElementById('customCrops').value.trim();
-            if (customCrops) {
-                const customItems = customCrops.split(',').map(s => s.trim()).filter(s => s);
-                crops = [...crops, ...customItems];
-            }
+            const cropsInput = document.getElementById('cropsInput').value.trim();
+            const crops = cropsInput ? cropsInput.split(',').map(s => s.trim()).filter(s => s) : [];
             
             if (!state) {
                 alert('Please select your state');
@@ -238,7 +208,7 @@
             }
             
             if (crops.length === 0 && livestock.length === 0) {
-                alert('Please select or enter at least one livestock or crop');
+                alert('Please enter at least one livestock or crop');
                 return;
             }
             
@@ -267,38 +237,8 @@
             if (userProfile) {
                 document.getElementById('farmName').value = userProfile.farm_name || '';
                 document.getElementById('stateSelect').value = userProfile.state || '';
-                
-                const standardLivestock = [];
-                const customLivestock = [];
-                (userProfile.livestock || []).forEach(item => {
-                    const checkbox = document.querySelector(`input[name="livestock"][value="${item}"]`);
-                    if (checkbox) {
-                        checkbox.checked = true;
-                        standardLivestock.push(item);
-                    } else {
-                        customLivestock.push(item);
-                    }
-                });
-                document.querySelectorAll('input[name="livestock"]').forEach(cb => {
-                    if (!standardLivestock.includes(cb.value)) cb.checked = false;
-                });
-                document.getElementById('customLivestock').value = customLivestock.join(', ');
-                
-                const standardCrops = [];
-                const customCrops = [];
-                (userProfile.crops || []).forEach(item => {
-                    const checkbox = document.querySelector(`input[name="crops"][value="${item}"]`);
-                    if (checkbox) {
-                        checkbox.checked = true;
-                        standardCrops.push(item);
-                    } else {
-                        customCrops.push(item);
-                    }
-                });
-                document.querySelectorAll('input[name="crops"]').forEach(cb => {
-                    if (!standardCrops.includes(cb.value)) cb.checked = false;
-                });
-                document.getElementById('customCrops').value = customCrops.join(', ');
+                document.getElementById('livestockInput').value = (userProfile.livestock || []).join(', ');
+                document.getElementById('cropsInput').value = (userProfile.crops || []).join(', ');
             }
             showModal();
         });

@@ -716,11 +716,7 @@ body {
     }
 }
 
-.custom-input-wrapper {
-    margin-top: 0.75rem;
-}
-
-.custom-input-wrapper input {
+.form-group input[type="text"] {
     width: 100%;
     padding: 0.75rem 1rem;
     border: 2px solid var(--border-color);
@@ -729,11 +725,11 @@ body {
     transition: border-color 0.2s ease;
 }
 
-.custom-input-wrapper input:focus {
+.form-group input[type="text"]:focus {
     outline: none;
     border-color: var(--primary-green);
 }
 
-.custom-input-wrapper input::placeholder {
+.form-group input[type="text"]::placeholder {
     color: #999;
 }
