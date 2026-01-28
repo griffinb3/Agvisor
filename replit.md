@@ -1,7 +1,7 @@
 # AgriAdvisor Board
 
 ## Overview
-An AI-powered board of advisors chatbot designed specifically for agricultural businesses. The app provides expert guidance through six specialized AI advisors covering different aspects of farm management, with personalized advice based on user's state, livestock, and crops.
+An AI-powered board of advisors chatbot designed specifically for agricultural businesses. The app provides expert guidance through six specialized AI advisors covering different aspects of farm management, with personalized advice based on user's state, livestock, crops, and uploaded business records.
 
 ## Current State
 - Fully functional Flask web application
@@ -32,6 +32,7 @@ An AI-powered board of advisors chatbot designed specifically for agricultural b
 - Conversational AI with agricultural expertise
 - **All advisors respond simultaneously** unless user asks for a specific advisor
 - User profile system (farm name, state, livestock, crops) for personalized advice
+- **Business records upload** - CSV/spreadsheet upload for data-driven, personalized advice
 - Position titles displayed instead of individual names
 - Legal advisor with federal and state-specific agricultural law knowledge
 - Conversation history per advisor
@@ -47,6 +48,7 @@ An AI-powered board of advisors chatbot designed specifically for agricultural b
 The app runs on port 5000 using the "Start application" workflow (`python main.py`).
 
 ## Recent Changes
+- January 28, 2026: Added business records upload (CSV/spreadsheet) for data-driven advice
 - January 28, 2026: Added custom text inputs for typing additional livestock/crops not in the preset list
 - January 28, 2026: Updated to have all advisors respond to questions by default
 - January 28, 2026: Removed individual names, now showing only position titles
