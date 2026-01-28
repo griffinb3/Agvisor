@@ -1,5 +1,7 @@
 import os
 import re
+import csv
+import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, jsonify, session
 from openai import OpenAI
@@ -114,6 +116,7 @@ Provide clear, practical legal guidance while noting that you are providing gene
         crops = user_profile.get('crops', [])
         livestock = user_profile.get('livestock', [])
         farm_name = user_profile.get('farm_name', '')
+        business_data = user_profile.get('business_data')
         
         context = f"\n\nIMPORTANT CONTEXT ABOUT THIS FARMER:\n"
         if farm_name:
@@ -124,6 +127,16 @@ Provide clear, practical legal guidance while noting that you are providing gene
             context += f"- Livestock: {', '.join(livestock)}\n"
         if crops:
             context += f"- Crops/Products: {', '.join(crops)}\n"
+        
+        if business_data:
+            context += f"\n\nBUSINESS RECORDS PROVIDED:\n"
+            context += f"- {business_data.get('summary', 'Business data uploaded')}\n"
+            context += f"- Data columns: {', '.join(business_data.get('headers', []))}\n"
+            context += f"\nSample data from their records:\n"
+            for i, row in enumerate(business_data.get('preview', [])[:5]):
+                row_str = ', '.join([f"{k}: {v}" for k, v in list(row.items())[:5]])
+                context += f"  Row {i+1}: {row_str}\n"
+            context += "\nUse this business data to provide specific, data-driven advice. Reference their actual numbers when relevant."
         
         context += "\nTailor all your advice specifically to their location, crops, and conditions. Reference relevant state-specific regulations, climate considerations, and market conditions when applicable."
         
@@ -185,14 +198,62 @@ def save_profile():
     data = request.json
     session_id = data.get('session_id', 'default')
     
+    existing_profile = user_profiles.get(session_id, {})
+    
     user_profiles[session_id] = {
         'farm_name': data.get('farm_name', ''),
         'state': data.get('state', ''),
         'livestock': data.get('livestock', []),
-        'crops': data.get('crops', [])
+        'crops': data.get('crops', []),
+        'business_data': existing_profile.get('business_data', None)
     }
     
     return jsonify({'status': 'saved', 'profile': user_profiles[session_id]})
+
+@app.route('/api/upload-records', methods=['POST'])
+def upload_records():
+    session_id = request.form.get('session_id', 'default')
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    try:
+        content = file.read().decode('utf-8')
+        reader = csv.DictReader(io.StringIO(content))
+        rows = list(reader)
+        
+        if len(rows) > 100:
+            rows = rows[:100]
+        
+        headers = reader.fieldnames or []
+        
+        summary = f"Business records with {len(rows)} rows and columns: {', '.join(headers[:10])}"
+        
+        data_preview = []
+        for row in rows[:20]:
+            data_preview.append(dict(row))
+        
+        if session_id not in user_profiles:
+            user_profiles[session_id] = {}
+        
+        user_profiles[session_id]['business_data'] = {
+            'summary': summary,
+            'headers': headers[:15],
+            'preview': data_preview,
+            'row_count': len(rows)
+        }
+        
+        return jsonify({
+            'status': 'uploaded',
+            'summary': summary,
+            'row_count': len(rows)
+        })
+    except Exception as e:
+        return jsonify({'error': f'Error processing file: {str(e)}'}), 400
 
 @app.route('/api/profile/<session_id>', methods=['GET'])
 def get_profile(session_id):

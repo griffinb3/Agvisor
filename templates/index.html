@@ -48,6 +48,19 @@
                 
                 <p class="form-hint" style="margin-top: -0.5rem; margin-bottom: 1rem; color: #c44;">* Please enter at least one livestock or crop</p>
                 
+                <div class="form-group">
+                    <label>Business Records (Optional)</label>
+                    <p class="form-hint">Upload a CSV or spreadsheet with your farm's financial or production data</p>
+                    <div class="file-upload-wrapper">
+                        <input type="file" id="businessRecords" accept=".csv,.xlsx,.xls">
+                        <div class="file-upload-label" id="fileLabel">
+                            <i class="fas fa-file-upload"></i>
+                            <span>Choose a file or drag it here</span>
+                        </div>
+                    </div>
+                    <p class="form-hint" id="fileStatus" style="margin-top: 0.5rem; color: var(--primary-green); display: none;"></p>
+                </div>
+                
                 <button type="submit" class="submit-btn">
                     <i class="fas fa-arrow-right"></i> Start Getting Advice
                 </button>
@@ -190,6 +203,50 @@
             }
         }
 
+        const fileInput = document.getElementById('businessRecords');
+        const fileLabel = document.getElementById('fileLabel');
+        const fileStatus = document.getElementById('fileStatus');
+        let uploadedFile = null;
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                uploadedFile = file;
+                fileLabel.innerHTML = `<i class="fas fa-file-check"></i><span>${file.name}</span>`;
+                fileLabel.classList.add('file-selected');
+            }
+        });
+
+        async function uploadBusinessRecords() {
+            if (!uploadedFile) return true;
+            
+            const formData = new FormData();
+            formData.append('file', uploadedFile);
+            formData.append('session_id', sessionId);
+            
+            try {
+                const response = await fetch('/api/upload-records', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert('Error uploading file: ' + data.error);
+                    return false;
+                }
+                
+                fileStatus.textContent = `Uploaded: ${data.row_count} records processed`;
+                fileStatus.style.display = 'block';
+                return true;
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Error uploading file. Please try again.');
+                return false;
+            }
+        }
+
         profileForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -215,6 +272,11 @@
             userProfile = { farm_name: farmName, state, livestock, crops };
             
             try {
+                if (uploadedFile) {
+                    const uploadSuccess = await uploadBusinessRecords();
+                    if (!uploadSuccess) return;
+                }
+                
                 await fetch('/api/profile', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -228,6 +290,7 @@
                 hideModal();
                 
                 localStorage.setItem('agriAdvisorProfile', JSON.stringify(userProfile));
+                uploadedFile = null;
             } catch (error) {
                 console.error('Error saving profile:', error);
             }

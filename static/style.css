@@ -733,3 +733,49 @@ body {
 .form-group input[type="text"]::placeholder {
     color: #999;
 }
+
+.file-upload-wrapper {
+    position: relative;
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.file-upload-wrapper:hover {
+    border-color: var(--primary-green);
+    background: rgba(45, 90, 39, 0.05);
+}
+
+.file-upload-wrapper input[type="file"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.file-upload-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-muted);
+}
+
+.file-upload-label i {
+    font-size: 2rem;
+    color: var(--primary-green);
+}
+
+.file-upload-label.file-selected {
+    color: var(--primary-green);
+}
+
+.file-upload-label.file-selected i {
+    color: var(--accent-gold);
+}
