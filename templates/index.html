@@ -88,16 +88,15 @@
                 <h2>Your Advisory Board</h2>
                 <div class="advisor-list">
                     {% for id, advisor in advisors.items() %}
-                    <button class="advisor-card {% if loop.first %}active{% endif %}" data-advisor="{{ id }}">
+                    <div class="advisor-card" data-advisor="{{ id }}">
                         <div class="advisor-icon">
                             <i class="fas fa-{{ advisor.icon }}"></i>
                         </div>
                         <div class="advisor-info">
-                            <h3>{{ advisor.name }}</h3>
-                            <p class="title">{{ advisor.title }}</p>
+                            <h3>{{ advisor.title }}</h3>
                             <p class="specialty">{{ advisor.specialty }}</p>
                         </div>
-                    </button>
+                    </div>
                     {% endfor %}
                 </div>
                 <button class="clear-btn" id="clearChat">
@@ -108,9 +107,9 @@
             <main class="chat-area">
                 <div class="chat-header">
                     <div class="current-advisor">
-                        <span>Speaking with: </span>
-                        <strong id="currentAdvisorName">Dr. Sarah Chen</strong>
-                        <span class="advisor-title" id="currentAdvisorTitle">Chief Agronomist</span>
+                        <span>Advisory Board Mode: </span>
+                        <strong>All Advisors</strong>
+                        <span class="advisor-title">Ask a question to get input from all board members</span>
                     </div>
                 </div>
 
@@ -171,7 +170,6 @@
         const advisorData = {
             {% for id, advisor in advisors.items() %}
             '{{ id }}': {
-                name: '{{ advisor.name }}',
                 title: '{{ advisor.title }}',
                 specialty: '{{ advisor.specialty }}',
                 icon: '{{ advisor.icon }}'
@@ -279,17 +277,6 @@
             showModal();
         }
 
-        advisorCards.forEach(card => {
-            card.addEventListener('click', () => {
-                advisorCards.forEach(c => c.classList.remove('active'));
-                card.classList.add('active');
-                currentAdvisor = card.dataset.advisor;
-                
-                const advisor = advisorData[currentAdvisor];
-                currentAdvisorName.textContent = advisor.name;
-                currentAdvisorTitle.textContent = advisor.title;
-            });
-        });
 
         messageInput.addEventListener('input', function() {
             this.style.height = 'auto';
@@ -322,14 +309,13 @@
             const loadingId = addLoadingMessage();
 
             try {
-                const response = await fetch('/api/chat', {
+                const response = await fetch('/api/chat/all', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
                         message: message,
-                        advisor: currentAdvisor,
                         session_id: sessionId
                     })
                 });
@@ -341,7 +327,7 @@
                 if (data.error) {
                     addMessage('Sorry, there was an error processing your request. Please try again.', 'error');
                 } else {
-                    addMessage(data.response, 'assistant', data.advisor);
+                    addAllAdvisorResponses(data.responses);
                 }
             } catch (error) {
                 removeLoadingMessage(loadingId);
@@ -359,8 +345,7 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        session_id: sessionId,
-                        advisor: currentAdvisor
+                        session_id: sessionId
                     })
                 });
 
@@ -378,20 +363,11 @@
             }
         });
 
-        function addMessage(content, type, advisor = null) {
+        function addMessage(content, type) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${type}-message`;
 
-            if (type === 'assistant' && advisor) {
-                const advisorInfo = advisorData[currentAdvisor];
-                messageDiv.innerHTML = `
-                    <div class="message-header">
-                        <i class="fas fa-${advisorInfo.icon}"></i>
-                        <span class="advisor-name">${advisor.name}</span>
-                    </div>
-                    <div class="message-content">${formatMessage(content)}</div>
-                `;
-            } else if (type === 'user') {
+            if (type === 'user') {
                 messageDiv.innerHTML = `
                     <div class="message-header">
                         <i class="fas fa-user"></i>
@@ -407,17 +383,37 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
+        function addAllAdvisorResponses(responses) {
+            const containerDiv = document.createElement('div');
+            containerDiv.className = 'advisor-responses-container';
+            
+            responses.forEach(resp => {
+                const responseDiv = document.createElement('div');
+                responseDiv.className = 'advisor-response';
+                responseDiv.innerHTML = `
+                    <div class="advisor-response-header">
+                        <i class="fas fa-${resp.icon}"></i>
+                        <span class="advisor-title">${resp.title}</span>
+                    </div>
+                    <div class="advisor-response-content">${formatMessage(resp.response)}</div>
+                `;
+                containerDiv.appendChild(responseDiv);
+            });
+            
+            chatMessages.appendChild(containerDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
         function addLoadingMessage() {
             const id = 'loading_' + Date.now();
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message assistant-message loading';
             messageDiv.id = id;
             
-            const advisorInfo = advisorData[currentAdvisor];
             messageDiv.innerHTML = `
                 <div class="message-header">
-                    <i class="fas fa-${advisorInfo.icon}"></i>
-                    <span class="advisor-name">${advisorInfo.name}</span>
+                    <i class="fas fa-users"></i>
+                    <span class="advisor-name">Advisory Board</span>
                 </div>
                 <div class="message-content">
                     <div class="typing-indicator">

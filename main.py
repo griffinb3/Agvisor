@@ -1,4 +1,6 @@
 import os
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, jsonify, session
 from openai import OpenAI
 
@@ -41,7 +43,7 @@ COMMON_CROPS = [
 
 def get_advisor_system_prompt(advisor_key, user_profile=None):
     base_prompts = {
-        "agronomist": """You are Dr. Sarah Chen, a Chief Agronomist with 25 years of experience in crop science and soil health. You specialize in:
+        "agronomist": """You are the Chief Agronomist on this agricultural advisory board with 25 years of experience in crop science and soil health. You specialize in:
 - Crop rotation strategies and planning
 - Soil testing and amendment recommendations
 - Pest and disease management
@@ -50,7 +52,7 @@ def get_advisor_system_prompt(advisor_key, user_profile=None):
 
 Provide expert, practical advice tailored to agricultural businesses. Be specific with recommendations and explain the science behind your suggestions when helpful.""",
 
-        "financial": """You are Marcus Thompson, an Agricultural Finance Director with extensive experience in farm economics. You specialize in:
+        "financial": """You are the Finance Director on this agricultural advisory board with extensive experience in farm economics. You specialize in:
 - Farm budgeting and cash flow management
 - Agricultural loans and financing options
 - Risk management and crop insurance
@@ -60,7 +62,7 @@ Provide expert, practical advice tailored to agricultural businesses. Be specifi
 
 Provide sound financial advice specific to agricultural businesses. Help farmers understand their numbers, identify cost savings, and make smart investment decisions.""",
 
-        "operations": """You are Elena Rodriguez, a Farm Operations Manager with expertise in agricultural logistics. You specialize in:
+        "operations": """You are the Operations Manager on this agricultural advisory board with expertise in agricultural logistics. You specialize in:
 - Equipment selection and maintenance scheduling
 - Labor management and workforce planning
 - Supply chain and distribution optimization
@@ -70,7 +72,7 @@ Provide sound financial advice specific to agricultural businesses. Help farmers
 
 Provide practical operational advice to help farms run more efficiently. Focus on actionable improvements that can be implemented realistically.""",
 
-        "marketing": """You are James Okonkwo, an Agricultural Marketing Strategist helping farms grow their business. You specialize in:
+        "marketing": """You are the Marketing Strategist on this agricultural advisory board helping farms grow their business. You specialize in:
 - Direct-to-consumer sales strategies
 - Farmers market and CSA program development
 - Wholesale and retail buyer relationships
@@ -80,7 +82,7 @@ Provide practical operational advice to help farms run more efficiently. Focus o
 
 Help farmers find new markets, improve their pricing strategies, and build stronger customer relationships.""",
 
-        "sustainability": """You are Dr. Amara Patel, a Sustainability Advisor focused on environmentally responsible farming. You specialize in:
+        "sustainability": """You are the Sustainability Advisor on this agricultural advisory board focused on environmentally responsible farming. You specialize in:
 - Organic certification processes
 - Regenerative agriculture practices
 - Carbon sequestration and credits
@@ -90,7 +92,7 @@ Help farmers find new markets, improve their pricing strategies, and build stron
 
 Guide farmers toward sustainable practices that are both environmentally beneficial and economically viable. Help them understand certifications, incentive programs, and long-term benefits.""",
 
-        "legal": """You are Robert Mitchell, JD, an Agricultural Law Specialist with expertise in both federal and state agricultural regulations. You specialize in:
+        "legal": """You are the Legal Specialist on this agricultural advisory board with expertise in both federal and state agricultural regulations. You specialize in:
 - Federal agricultural laws and USDA regulations
 - State-specific agricultural codes and requirements
 - Land use, zoning, and water rights
@@ -140,38 +142,32 @@ Provide clear, practical legal guidance while noting that you are providing gene
 
 ADVISORS = {
     "agronomist": {
-        "name": "Dr. Sarah Chen",
         "title": "Chief Agronomist",
         "specialty": "Crop Science & Soil Health",
         "icon": "leaf"
     },
     "financial": {
-        "name": "Marcus Thompson",
-        "title": "Agricultural Finance Director",
+        "title": "Finance Director",
         "specialty": "Farm Economics & Investment",
         "icon": "chart-line"
     },
     "operations": {
-        "name": "Elena Rodriguez",
         "title": "Operations Manager",
         "specialty": "Farm Operations & Logistics",
         "icon": "cogs"
     },
     "marketing": {
-        "name": "James Okonkwo",
-        "title": "Agricultural Marketing Strategist",
+        "title": "Marketing Strategist",
         "specialty": "Sales & Market Development",
         "icon": "bullhorn"
     },
     "sustainability": {
-        "name": "Dr. Amara Patel",
         "title": "Sustainability Advisor",
         "specialty": "Environmental Stewardship",
         "icon": "seedling"
     },
     "legal": {
-        "name": "Robert Mitchell, JD",
-        "title": "Agricultural Law Specialist",
+        "title": "Legal Specialist",
         "specialty": "Federal & State Regulations",
         "icon": "gavel"
     }
@@ -248,12 +244,136 @@ def chat():
         return jsonify({
             'response': assistant_message,
             'advisor': {
-                'name': advisor['name'],
                 'title': advisor['title']
             }
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def detect_specific_advisor(message):
+    """Detect if user is asking for a specific advisor based on keywords"""
+    message_lower = message.lower()
+    
+    advisor_keywords = {
+        'agronomist': ['agronomist', 'crop', 'soil', 'pest', 'plant', 'seeds', 'fertilizer', 'yield'],
+        'financial': ['finance', 'financial', 'budget', 'loan', 'insurance', 'investment', 'money', 'cost', 'profit', 'grant'],
+        'operations': ['operations', 'equipment', 'labor', 'harvest', 'logistics', 'storage', 'machinery', 'workers'],
+        'marketing': ['marketing', 'sales', 'market', 'brand', 'customer', 'pricing', 'sell', 'buyer'],
+        'sustainability': ['sustainability', 'sustainable', 'organic', 'carbon', 'environment', 'conservation', 'renewable', 'green'],
+        'legal': ['legal', 'law', 'regulation', 'compliance', 'contract', 'zoning', 'rights', 'liability', 'attorney', 'lawyer']
+    }
+    
+    title_keywords = {
+        'agronomist': ['agronomist'],
+        'financial': ['finance director', 'financial'],
+        'operations': ['operations manager', 'operations'],
+        'marketing': ['marketing strategist', 'marketing'],
+        'sustainability': ['sustainability advisor', 'sustainability'],
+        'legal': ['legal specialist', 'legal', 'lawyer', 'attorney']
+    }
+    
+    for advisor_id, keywords in title_keywords.items():
+        for keyword in keywords:
+            pattern = rf'\b{keyword}\b'
+            if re.search(pattern, message_lower):
+                if any(phrase in message_lower for phrase in ['ask the', 'talk to', 'speak to', 'from the', 'hey ', 'question for']):
+                    return advisor_id
+    
+    return None
+
+def get_advisor_response(advisor_id, message, session_id, user_profile):
+    """Get response from a single advisor"""
+    advisor = ADVISORS.get(advisor_id, ADVISORS['agronomist'])
+    
+    history_key = f"{session_id}_{advisor_id}"
+    if history_key not in conversation_histories:
+        conversation_histories[history_key] = []
+    
+    system_prompt = get_advisor_system_prompt(advisor_id, user_profile)
+    
+    messages = [
+        {"role": "system", "content": system_prompt}
+    ]
+    messages.extend(conversation_histories[history_key])
+    messages.append({"role": "user", "content": message})
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_completion_tokens=1024
+        )
+        
+        assistant_message = response.choices[0].message.content
+        
+        conversation_histories[history_key].append({"role": "user", "content": message})
+        conversation_histories[history_key].append({"role": "assistant", "content": assistant_message})
+        
+        if len(conversation_histories[history_key]) > 20:
+            conversation_histories[history_key] = conversation_histories[history_key][-20:]
+        
+        return {
+            'advisor_id': advisor_id,
+            'response': assistant_message,
+            'title': advisor['title'],
+            'icon': advisor['icon']
+        }
+    except Exception as e:
+        return {
+            'advisor_id': advisor_id,
+            'response': f"Error getting response: {str(e)}",
+            'title': advisor['title'],
+            'icon': advisor['icon']
+        }
+
+@app.route('/api/chat/all', methods=['POST'])
+def chat_all():
+    """Get responses from all advisors or detect if specific advisor requested"""
+    data = request.json
+    message = data.get('message', '')
+    session_id = data.get('session_id', 'default')
+    
+    if not message:
+        return jsonify({'error': 'No message provided'}), 400
+    
+    user_profile = user_profiles.get(session_id)
+    
+    specific_advisor = detect_specific_advisor(message)
+    
+    if specific_advisor:
+        result = get_advisor_response(specific_advisor, message, session_id, user_profile)
+        return jsonify({
+            'mode': 'single',
+            'responses': [result]
+        })
+    
+    responses = []
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {
+            executor.submit(get_advisor_response, advisor_id, message, session_id, user_profile): advisor_id
+            for advisor_id in ADVISORS.keys()
+        }
+        
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                responses.append(result)
+            except Exception as e:
+                advisor_id = futures[future]
+                responses.append({
+                    'advisor_id': advisor_id,
+                    'response': f"Error: {str(e)}",
+                    'title': ADVISORS[advisor_id]['title'],
+                    'icon': ADVISORS[advisor_id]['icon']
+                })
+    
+    advisor_order = ['agronomist', 'financial', 'operations', 'marketing', 'sustainability', 'legal']
+    responses.sort(key=lambda x: advisor_order.index(x['advisor_id']) if x['advisor_id'] in advisor_order else 99)
+    
+    return jsonify({
+        'mode': 'all',
+        'responses': responses
+    })
 
 @app.route('/api/clear', methods=['POST'])
 def clear_history():
@@ -276,7 +396,6 @@ def clear_history():
 def get_advisors():
     return jsonify({
         advisor_id: {
-            'name': advisor['name'],
             'title': advisor['title'],
             'specialty': advisor['specialty'],
             'icon': advisor['icon']

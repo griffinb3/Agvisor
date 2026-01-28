@@ -100,20 +100,8 @@ body {
     border: 2px solid var(--border-color);
     border-radius: 12px;
     background: var(--bg-white);
-    cursor: pointer;
-    transition: all 0.2s ease;
     text-align: left;
     width: 100%;
-}
-
-.advisor-card:hover {
-    border-color: var(--light-green);
-    background: rgba(74, 124, 68, 0.05);
-}
-
-.advisor-card.active {
-    border-color: var(--primary-green);
-    background: rgba(45, 90, 39, 0.1);
 }
 
 .advisor-icon {
@@ -132,9 +120,6 @@ body {
     font-size: 1.2rem;
 }
 
-.advisor-card.active .advisor-icon {
-    background: var(--accent-gold);
-}
 
 .advisor-info h3 {
     font-size: 0.95rem;
@@ -669,5 +654,64 @@ body {
 
     .profile-btn span {
         display: none;
+    }
+}
+
+.advisor-responses-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.advisor-response {
+    background: var(--bg-white);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+}
+
+.advisor-response-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--primary-green);
+    color: white;
+}
+
+.advisor-response-header i {
+    font-size: 1.1rem;
+    color: var(--accent-gold);
+}
+
+.advisor-response-header .advisor-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.advisor-response-content {
+    padding: 1rem;
+    line-height: 1.6;
+    color: var(--text-dark);
+}
+
+.advisor-response-content strong {
+    color: var(--primary-green);
+}
+
+@media (max-width: 768px) {
+    .advisor-responses-container {
+        gap: 0.75rem;
+    }
+    
+    .advisor-response-header {
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .advisor-response-content {
+        padding: 0.75rem;
+        font-size: 0.9rem;
     }
 }
