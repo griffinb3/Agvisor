@@ -47,6 +47,7 @@ An AI-powered board of advisors chatbot designed specifically for agricultural b
 The app runs on port 5000 using the "Start application" workflow (`python main.py`).
 
 ## Recent Changes
+- January 28, 2026: Added custom text inputs for typing additional livestock/crops not in the preset list
 - January 28, 2026: Updated to have all advisors respond to questions by default
 - January 28, 2026: Removed individual names, now showing only position titles
 - January 28, 2026: Added livestock options to user profile (16 livestock types)
