@@ -1,4 +1,4 @@
-# AgriAdvisor Board
+# Agvisor Board
 
 ## Overview
 An AI-powered board of advisors chatbot designed specifically for agricultural businesses. The app provides expert guidance through six specialized AI advisors covering different aspects of farm management, with personalized advice based on user's state, livestock, crops, and uploaded business records.
