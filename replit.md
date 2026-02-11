@@ -56,6 +56,7 @@ An AI-powered board of advisors chatbot designed for all types of agricultural b
 The app runs on port 5000 using the "Start application" workflow (`python main.py`).
 
 ## Recent Changes
+- February 11, 2026: Added drag-and-drop for optional advisors in sidebar — drag from "Available Specialists" to add, click X to remove
 - February 11, 2026: Added customizable advisory board with 5 base + 4 optional advisors and business-type suggestions
 - February 11, 2026: Broadened to support all ag business types (not just livestock/crops)
 - January 28, 2026: Added business records upload (CSV/spreadsheet) for data-driven advice

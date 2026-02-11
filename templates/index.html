@@ -140,8 +140,17 @@
 
         <div class="main-content">
             <aside class="sidebar">
-                <h2>Your Advisory Board</h2>
-                <div class="advisor-list" id="advisorList">
+                <div class="sidebar-scroll">
+                    <h2>Your Advisory Board</h2>
+                    <div class="advisor-list" id="advisorList">
+                    </div>
+                    <div class="sidebar-divider" id="availableSection" style="display:none;">
+                        <div class="available-header">
+                            <i class="fas fa-plus-circle"></i> Available Specialists
+                        </div>
+                        <div class="available-advisors" id="availableAdvisors">
+                        </div>
+                    </div>
                 </div>
                 <button class="clear-btn" id="clearChat">
                     <i class="fas fa-trash-alt"></i> Clear Conversation
@@ -229,6 +238,8 @@
         const editProfileBtn = document.getElementById('editProfileBtn');
         const profileSummary = document.getElementById('profileSummary');
         const advisorList = document.getElementById('advisorList');
+        const availableAdvisors = document.getElementById('availableAdvisors');
+        const availableSection = document.getElementById('availableSection');
         const businessTypeSelect = document.getElementById('businessType');
         const boardSuggestionDiv = document.getElementById('boardSuggestion');
 
@@ -251,30 +262,155 @@
             return active;
         }
 
+        const advisorOrder = ['financial', 'operations', 'marketing', 'legal', 'risk', 'commodity_risk', 'livestock', 'sustainability', 'agronomist'];
+
+        function sortAdvisorIds(ids) {
+            return ids.sort((a, b) => {
+                return (advisorOrder.indexOf(a) === -1 ? 99 : advisorOrder.indexOf(a)) - (advisorOrder.indexOf(b) === -1 ? 99 : advisorOrder.indexOf(b));
+            });
+        }
+
+        function createAdvisorCard(id, advisor, opts = {}) {
+            const card = document.createElement('div');
+            card.className = 'advisor-card' + (opts.draggable ? ' draggable-card' : '') + (opts.removable ? ' removable-card' : '');
+            card.dataset.advisor = id;
+            if (opts.draggable) {
+                card.setAttribute('draggable', 'true');
+            }
+            card.innerHTML = `
+                ${opts.draggable ? `<div class="drag-handle"><i class="fas fa-grip-vertical"></i></div>` : ''}
+                <div class="advisor-icon">
+                    <i class="fas fa-${advisor.icon}"></i>
+                </div>
+                <div class="advisor-info">
+                    <h3>${advisor.title}</h3>
+                    <p class="specialty">${advisor.specialty}</p>
+                </div>
+                ${opts.draggable ? `<div class="add-advisor-hint"><i class="fas fa-plus"></i></div>` : ''}
+                ${opts.removable ? `<button class="remove-advisor-btn" title="Remove from board"><i class="fas fa-times"></i></button>` : ''}
+            `;
+            return card;
+        }
+
         function renderSidebar() {
             const active = getActiveAdvisors();
-            const order = ['financial', 'operations', 'marketing', 'legal', 'risk', 'commodity_risk', 'livestock', 'sustainability', 'agronomist'];
-            const sortedIds = Object.keys(active).sort((a, b) => {
-                return (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b));
-            });
+            const selectedIds = (userProfile && userProfile.selected_advisors) ? userProfile.selected_advisors : [];
 
             advisorList.innerHTML = '';
-            sortedIds.forEach(id => {
+            const activeIds = sortAdvisorIds(Object.keys(active));
+            activeIds.forEach(id => {
                 const advisor = active[id];
                 const isOptional = !!optionalAdvisors[id];
-                const card = document.createElement('div');
-                card.className = 'advisor-card';
-                card.dataset.advisor = id;
-                card.innerHTML = `
-                    <div class="advisor-icon">
-                        <i class="fas fa-${advisor.icon}"></i>
-                    </div>
-                    <div class="advisor-info">
-                        <h3>${advisor.title}</h3>
-                        <p class="specialty">${advisor.specialty}</p>
-                    </div>
-                `;
+                const card = createAdvisorCard(id, advisor, { removable: isOptional });
+                if (isOptional) {
+                    card.querySelector('.remove-advisor-btn').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        removeAdvisorFromBoard(id);
+                    });
+                }
                 advisorList.appendChild(card);
+            });
+
+            const unselected = Object.keys(optionalAdvisors).filter(id => !selectedIds.includes(id));
+            if (unselected.length > 0) {
+                availableSection.style.display = 'block';
+                availableAdvisors.innerHTML = '';
+                sortAdvisorIds(unselected).forEach(id => {
+                    const advisor = optionalAdvisors[id];
+                    const card = createAdvisorCard(id, advisor, { draggable: true });
+                    setupDragSource(card, id);
+                    card.addEventListener('click', () => addAdvisorToBoard(id));
+                    availableAdvisors.appendChild(card);
+                });
+            } else {
+                availableSection.style.display = 'none';
+            }
+
+            setupDropTarget();
+        }
+
+        let draggedAdvisorId = null;
+        let dropTargetBound = false;
+
+        function setupDragSource(card, advisorId) {
+            card.addEventListener('dragstart', (e) => {
+                draggedAdvisorId = advisorId;
+                card.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', advisorId);
+                setTimeout(() => advisorList.classList.add('drop-zone-active'), 0);
+            });
+            card.addEventListener('dragend', () => {
+                card.classList.remove('dragging');
+                advisorList.classList.remove('drop-zone-active');
+                draggedAdvisorId = null;
+            });
+        }
+
+        function setupDropTarget() {
+            if (dropTargetBound) return;
+            dropTargetBound = true;
+            advisorList.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                advisorList.classList.add('drop-zone-hover');
+            });
+            advisorList.addEventListener('dragleave', (e) => {
+                if (!advisorList.contains(e.relatedTarget)) {
+                    advisorList.classList.remove('drop-zone-hover');
+                }
+            });
+            advisorList.addEventListener('drop', (e) => {
+                e.preventDefault();
+                advisorList.classList.remove('drop-zone-hover');
+                advisorList.classList.remove('drop-zone-active');
+                const advisorId = e.dataTransfer.getData('text/plain');
+                if (advisorId && optionalAdvisors[advisorId]) {
+                    addAdvisorToBoard(advisorId);
+                }
+            });
+        }
+
+        function addAdvisorToBoard(advisorId) {
+            if (!userProfile) userProfile = { selected_advisors: [] };
+            if (!userProfile.selected_advisors) userProfile.selected_advisors = [];
+            if (userProfile.selected_advisors.includes(advisorId)) return;
+            userProfile.selected_advisors.push(advisorId);
+            syncBoardToBackend();
+            renderSidebar();
+            syncModalCheckboxes();
+        }
+
+        function removeAdvisorFromBoard(advisorId) {
+            if (!userProfile || !userProfile.selected_advisors) return;
+            userProfile.selected_advisors = userProfile.selected_advisors.filter(id => id !== advisorId);
+            syncBoardToBackend();
+            renderSidebar();
+            syncModalCheckboxes();
+        }
+
+        function syncModalCheckboxes() {
+            const selected = (userProfile && userProfile.selected_advisors) ? userProfile.selected_advisors : [];
+            document.querySelectorAll('.optional-advisor-checkbox input[type="checkbox"]').forEach(cb => {
+                const isChecked = selected.includes(cb.value);
+                cb.checked = isChecked;
+                if (isChecked) {
+                    cb.closest('.optional-advisor-checkbox').classList.add('checked');
+                } else {
+                    cb.closest('.optional-advisor-checkbox').classList.remove('checked');
+                }
+            });
+        }
+
+        function syncBoardToBackend() {
+            localStorage.setItem('agvisorProfile', JSON.stringify(userProfile));
+            fetch('/api/profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    ...userProfile
+                })
             });
         }
 
