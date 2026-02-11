@@ -787,3 +787,161 @@ body {
 .file-upload-label.file-selected i {
     color: var(--accent-gold);
 }
+
+.base-advisors-info {
+    margin-bottom: 1rem;
+}
+
+.board-section-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.board-section-label i {
+    color: var(--primary-green);
+}
+
+.base-advisor-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.advisor-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.advisor-chip.base-chip {
+    background: rgba(45, 90, 39, 0.1);
+    color: var(--primary-green);
+    border: 1px solid rgba(45, 90, 39, 0.2);
+}
+
+.board-suggestion {
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: #5d4037;
+}
+
+.board-suggestion i {
+    color: #f9a825;
+    margin-right: 0.25rem;
+}
+
+.optional-advisor-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.optional-advisor-checkbox {
+    cursor: pointer;
+    display: block;
+}
+
+.optional-advisor-checkbox input[type="checkbox"] {
+    display: none;
+}
+
+.advisor-checkbox-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.advisor-checkbox-card:hover {
+    border-color: var(--light-green);
+    background: rgba(45, 90, 39, 0.02);
+}
+
+.optional-advisor-checkbox.checked .advisor-checkbox-card {
+    border-color: var(--primary-green);
+    background: rgba(45, 90, 39, 0.06);
+}
+
+.advisor-checkbox-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--bg-cream);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.advisor-checkbox-icon i {
+    font-size: 1rem;
+    color: var(--primary-green);
+}
+
+.advisor-checkbox-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.advisor-checkbox-info strong {
+    font-size: 0.9rem;
+    color: var(--text-dark);
+}
+
+.advisor-checkbox-info span {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.advisor-checkbox-check {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.advisor-checkbox-check i {
+    font-size: 0.7rem;
+    color: white;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.optional-advisor-checkbox.checked .advisor-checkbox-check {
+    background: var(--primary-green);
+    border-color: var(--primary-green);
+}
+
+.optional-advisor-checkbox.checked .advisor-checkbox-check i {
+    opacity: 1;
+}
+
+.optional-advisors-section {
+    margin-top: 0.75rem;
+}

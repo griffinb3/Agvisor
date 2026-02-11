@@ -63,6 +63,46 @@
                     <p class="form-hint">Tell us what you do — products, services, scale, etc.</p>
                     <textarea id="businessDescription" rows="3" placeholder="e.g., 2,000-acre corn and soybean operation, also sell seed to neighboring farms" required></textarea>
                 </div>
+
+                <div class="form-group">
+                    <label>Build Your Advisory Board</label>
+                    <p class="form-hint">Your board always includes 5 core advisors. Add optional specialists below.</p>
+                    
+                    <div class="base-advisors-info">
+                        <p class="board-section-label"><i class="fas fa-lock"></i> Core Board Members (always active)</p>
+                        <div class="base-advisor-chips">
+                            {% for id, advisor in base_advisors.items() %}
+                            <span class="advisor-chip base-chip">
+                                <i class="fas fa-{{ advisor.icon }}"></i> {{ advisor.title }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="optional-advisors-section">
+                        <p class="board-section-label"><i class="fas fa-plus-circle"></i> Optional Specialists</p>
+                        <div id="boardSuggestion" class="board-suggestion" style="display: none;"></div>
+                        <div class="optional-advisor-list">
+                            {% for id, advisor in optional_advisors.items() %}
+                            <label class="optional-advisor-checkbox" data-advisor-id="{{ id }}">
+                                <input type="checkbox" name="optional_advisors" value="{{ id }}">
+                                <div class="advisor-checkbox-card">
+                                    <div class="advisor-checkbox-icon">
+                                        <i class="fas fa-{{ advisor.icon }}"></i>
+                                    </div>
+                                    <div class="advisor-checkbox-info">
+                                        <strong>{{ advisor.title }}</strong>
+                                        <span>{{ advisor.specialty }}</span>
+                                    </div>
+                                    <div class="advisor-checkbox-check">
+                                        <i class="fas fa-check"></i>
+                                    </div>
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="form-group">
                     <label>Business Records (Optional)</label>
@@ -101,18 +141,7 @@
         <div class="main-content">
             <aside class="sidebar">
                 <h2>Your Advisory Board</h2>
-                <div class="advisor-list">
-                    {% for id, advisor in advisors.items() %}
-                    <div class="advisor-card" data-advisor="{{ id }}">
-                        <div class="advisor-icon">
-                            <i class="fas fa-{{ advisor.icon }}"></i>
-                        </div>
-                        <div class="advisor-info">
-                            <h3>{{ advisor.title }}</h3>
-                            <p class="specialty">{{ advisor.specialty }}</p>
-                        </div>
-                    </div>
-                    {% endfor %}
+                <div class="advisor-list" id="advisorList">
                 </div>
                 <button class="clear-btn" id="clearChat">
                     <i class="fas fa-trash-alt"></i> Clear Conversation
@@ -133,15 +162,14 @@
                         <div class="welcome-icon">
                             <i class="fas fa-seedling"></i>
                         </div>
-                        <h2>Welcome to Your Agricultural Advisory Board</h2>
-                        <p>Select an advisor from the left panel and ask any question about your agricultural business. Our AI-powered experts are here to help with:</p>
+                        <h2>Welcome to Your Advisory Board</h2>
+                        <p>Ask any question about your agricultural business. Your AI-powered board of advisors is here to help with:</p>
                         <ul>
-                            <li><i class="fas fa-check"></i> Crop planning and soil management</li>
                             <li><i class="fas fa-check"></i> Financial planning and investment decisions</li>
                             <li><i class="fas fa-check"></i> Operations optimization and logistics</li>
                             <li><i class="fas fa-check"></i> Marketing strategies and sales growth</li>
-                            <li><i class="fas fa-check"></i> Sustainability practices and certifications</li>
                             <li><i class="fas fa-check"></i> Federal and state agricultural regulations</li>
+                            <li><i class="fas fa-check"></i> Risk management and insurance</li>
                         </ul>
                     </div>
                 </div>
@@ -151,7 +179,7 @@
                         <div class="input-wrapper">
                             <textarea 
                                 id="messageInput" 
-                                placeholder="Ask your agricultural advisor a question..."
+                                placeholder="Ask your advisory board a question..."
                                 rows="1"
                             ></textarea>
                             <button type="submit" id="sendBtn">
@@ -166,24 +194,12 @@
 
     <script>
         const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
-        let currentAdvisor = 'agronomist';
+        let currentAdvisor = 'financial';
         let isLoading = false;
         let userProfile = null;
 
-        const modal = document.getElementById('onboardingModal');
-        const profileForm = document.getElementById('profileForm');
-        const chatMessages = document.getElementById('chatMessages');
-        const messageInput = document.getElementById('messageInput');
-        const chatForm = document.getElementById('chatForm');
-        const advisorCards = document.querySelectorAll('.advisor-card');
-        const clearBtn = document.getElementById('clearChat');
-        const currentAdvisorName = document.getElementById('currentAdvisorName');
-        const currentAdvisorTitle = document.getElementById('currentAdvisorTitle');
-        const editProfileBtn = document.getElementById('editProfileBtn');
-        const profileSummary = document.getElementById('profileSummary');
-
-        const advisorData = {
-            {% for id, advisor in advisors.items() %}
+        const baseAdvisors = {
+            {% for id, advisor in base_advisors.items() %}
             '{{ id }}': {
                 title: '{{ advisor.title }}',
                 specialty: '{{ advisor.specialty }}',
@@ -192,12 +208,74 @@
             {% endfor %}
         };
 
+        const optionalAdvisors = {
+            {% for id, advisor in optional_advisors.items() %}
+            '{{ id }}': {
+                title: '{{ advisor.title }}',
+                specialty: '{{ advisor.specialty }}',
+                icon: '{{ advisor.icon }}'
+            },
+            {% endfor %}
+        };
+
+        const boardSuggestions = {{ board_suggestions | tojson }};
+
+        const modal = document.getElementById('onboardingModal');
+        const profileForm = document.getElementById('profileForm');
+        const chatMessages = document.getElementById('chatMessages');
+        const messageInput = document.getElementById('messageInput');
+        const chatForm = document.getElementById('chatForm');
+        const clearBtn = document.getElementById('clearChat');
+        const editProfileBtn = document.getElementById('editProfileBtn');
+        const profileSummary = document.getElementById('profileSummary');
+        const advisorList = document.getElementById('advisorList');
+        const businessTypeSelect = document.getElementById('businessType');
+        const boardSuggestionDiv = document.getElementById('boardSuggestion');
+
         function showModal() {
             modal.style.display = 'flex';
         }
 
         function hideModal() {
             modal.style.display = 'none';
+        }
+
+        function getActiveAdvisors() {
+            const selected = (userProfile && userProfile.selected_advisors) ? userProfile.selected_advisors : [];
+            const active = {...baseAdvisors};
+            selected.forEach(id => {
+                if (optionalAdvisors[id]) {
+                    active[id] = optionalAdvisors[id];
+                }
+            });
+            return active;
+        }
+
+        function renderSidebar() {
+            const active = getActiveAdvisors();
+            const order = ['financial', 'operations', 'marketing', 'legal', 'risk', 'commodity_risk', 'livestock', 'sustainability', 'agronomist'];
+            const sortedIds = Object.keys(active).sort((a, b) => {
+                return (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b));
+            });
+
+            advisorList.innerHTML = '';
+            sortedIds.forEach(id => {
+                const advisor = active[id];
+                const isOptional = !!optionalAdvisors[id];
+                const card = document.createElement('div');
+                card.className = 'advisor-card';
+                card.dataset.advisor = id;
+                card.innerHTML = `
+                    <div class="advisor-icon">
+                        <i class="fas fa-${advisor.icon}"></i>
+                    </div>
+                    <div class="advisor-info">
+                        <h3>${advisor.title}</h3>
+                        <p class="specialty">${advisor.specialty}</p>
+                    </div>
+                `;
+                advisorList.appendChild(card);
+            });
         }
 
         function updateProfileSummary() {
@@ -211,6 +289,43 @@
                 profileSummary.textContent = 'Set up profile';
             }
         }
+
+        businessTypeSelect.addEventListener('change', function() {
+            const type = this.value;
+            const suggestion = boardSuggestions[type];
+            
+            if (suggestion && suggestion.tip) {
+                boardSuggestionDiv.innerHTML = `<i class="fas fa-lightbulb"></i> <strong>Suggestion:</strong> ${suggestion.tip}`;
+                boardSuggestionDiv.style.display = 'block';
+                
+                document.querySelectorAll('.optional-advisor-checkbox input[type="checkbox"]').forEach(cb => {
+                    cb.checked = false;
+                    cb.closest('.optional-advisor-checkbox').classList.remove('checked');
+                });
+                
+                if (suggestion.recommended && suggestion.recommended.length > 0) {
+                    suggestion.recommended.forEach(advisorId => {
+                        const cb = document.querySelector(`.optional-advisor-checkbox[data-advisor-id="${advisorId}"] input[type="checkbox"]`);
+                        if (cb) {
+                            cb.checked = true;
+                            cb.closest('.optional-advisor-checkbox').classList.add('checked');
+                        }
+                    });
+                }
+            } else {
+                boardSuggestionDiv.style.display = 'none';
+            }
+        });
+
+        document.querySelectorAll('.optional-advisor-checkbox input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', function() {
+                if (this.checked) {
+                    this.closest('.optional-advisor-checkbox').classList.add('checked');
+                } else {
+                    this.closest('.optional-advisor-checkbox').classList.remove('checked');
+                }
+            });
+        });
 
         const fileInput = document.getElementById('businessRecords');
         const fileLabel = document.getElementById('fileLabel');
@@ -264,6 +379,11 @@
             const businessType = document.getElementById('businessType').value;
             const businessDescription = document.getElementById('businessDescription').value.trim();
             
+            const selectedAdvisors = [];
+            document.querySelectorAll('.optional-advisor-checkbox input[type="checkbox"]:checked').forEach(cb => {
+                selectedAdvisors.push(cb.value);
+            });
+            
             if (!state) {
                 alert('Please select your state');
                 return;
@@ -279,7 +399,13 @@
                 return;
             }
             
-            userProfile = { business_name: businessName, state, business_type: businessType, business_description: businessDescription };
+            userProfile = { 
+                business_name: businessName, 
+                state, 
+                business_type: businessType, 
+                business_description: businessDescription,
+                selected_advisors: selectedAdvisors
+            };
             
             try {
                 if (uploadedFile) {
@@ -297,6 +423,7 @@
                 });
                 
                 updateProfileSummary();
+                renderSidebar();
                 hideModal();
                 
                 localStorage.setItem('agvisorProfile', JSON.stringify(userProfile));
@@ -312,6 +439,29 @@
                 document.getElementById('stateSelect').value = userProfile.state || '';
                 document.getElementById('businessType').value = userProfile.business_type || '';
                 document.getElementById('businessDescription').value = userProfile.business_description || '';
+                
+                document.querySelectorAll('.optional-advisor-checkbox input[type="checkbox"]').forEach(cb => {
+                    cb.checked = false;
+                    cb.closest('.optional-advisor-checkbox').classList.remove('checked');
+                });
+                
+                if (userProfile.selected_advisors) {
+                    userProfile.selected_advisors.forEach(advisorId => {
+                        const cb = document.querySelector(`.optional-advisor-checkbox[data-advisor-id="${advisorId}"] input[type="checkbox"]`);
+                        if (cb) {
+                            cb.checked = true;
+                            cb.closest('.optional-advisor-checkbox').classList.add('checked');
+                        }
+                    });
+                }
+                
+                if (userProfile.business_type) {
+                    const suggestion = boardSuggestions[userProfile.business_type];
+                    if (suggestion && suggestion.tip) {
+                        boardSuggestionDiv.innerHTML = `<i class="fas fa-lightbulb"></i> <strong>Suggestion:</strong> ${suggestion.tip}`;
+                        boardSuggestionDiv.style.display = 'block';
+                    }
+                }
             }
             showModal();
         });
@@ -320,6 +470,7 @@
         if (savedProfile) {
             userProfile = JSON.parse(savedProfile);
             updateProfileSummary();
+            renderSidebar();
             
             fetch('/api/profile', {
                 method: 'POST',
@@ -330,6 +481,7 @@
                 })
             });
         } else {
+            renderSidebar();
             showModal();
         }
 
@@ -411,7 +563,7 @@
                             <i class="fas fa-seedling"></i>
                         </div>
                         <h2>Conversation Cleared</h2>
-                        <p>Start a new conversation with your agricultural advisors.</p>
+                        <p>Start a new conversation with your advisory board.</p>
                     </div>
                 `;
             } catch (error) {
