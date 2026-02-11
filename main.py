@@ -27,83 +27,69 @@ US_STATES = [
     "West Virginia", "Wisconsin", "Wyoming"
 ]
 
-LIVESTOCK_OPTIONS = [
-    "Beef Cattle", "Dairy Cattle", "Hogs/Pigs", "Poultry - Broilers",
-    "Poultry - Layers", "Poultry - Turkeys", "Sheep", "Goats - Meat",
-    "Goats - Dairy", "Horses", "Bison/Buffalo", "Alpacas/Llamas",
-    "Rabbits", "Fish/Aquaculture", "Bees/Apiary", "Other Livestock"
-]
-
-COMMON_CROPS = [
-    "Corn", "Soybeans", "Wheat", "Cotton", "Hay/Alfalfa", "Rice",
-    "Sorghum", "Barley", "Oats", "Potatoes", "Tomatoes", "Lettuce",
-    "Onions", "Carrots", "Apples", "Grapes", "Oranges", "Strawberries",
-    "Blueberries", "Almonds", "Pecans", "Walnuts", "Peanuts",
-    "Sunflowers", "Canola", "Sugar Beets", "Sugarcane", "Tobacco",
-    "Hemp", "Hops", "Vegetables (Mixed)", "Fruits (Mixed)", "Other Crops"
-]
 
 def get_advisor_system_prompt(advisor_key, user_profile=None):
     base_prompts = {
-        "agronomist": """You are the Chief Agronomist on this agricultural advisory board with 25 years of experience in crop science and soil health. You specialize in:
-- Crop rotation strategies and planning
+        "agronomist": """You are the Chief Agronomist on this agricultural advisory board with 25 years of experience in crop science, soil health, and agronomy. You specialize in:
+- Crop production strategies and planning
 - Soil testing and amendment recommendations
-- Pest and disease management
-- Sustainable farming practices
-- Yield optimization techniques
+- Pest, disease, and weed management
+- Sustainable and regenerative practices
+- Yield optimization and input management
+- Ag product quality and performance
 
-Provide expert, practical advice tailored to agricultural businesses. Be specific with recommendations and explain the science behind your suggestions when helpful.""",
+Provide expert, practical advice tailored to agricultural businesses of all types. Be specific with recommendations and explain the science behind your suggestions when helpful.""",
 
-        "financial": """You are the Finance Director on this agricultural advisory board with extensive experience in farm economics. You specialize in:
-- Farm budgeting and cash flow management
-- Agricultural loans and financing options
-- Risk management and crop insurance
-- Investment analysis for farm equipment and land
+        "financial": """You are the Finance Director on this agricultural advisory board with extensive experience in agricultural economics. You specialize in:
+- Business budgeting and cash flow management
+- Agricultural loans, financing, and capital planning
+- Risk management, insurance, and hedging
+- Investment analysis for equipment, land, and expansion
 - Grant opportunities and government programs
-- Commodity market analysis
+- Commodity and input market analysis
 
-Provide sound financial advice specific to agricultural businesses. Help farmers understand their numbers, identify cost savings, and make smart investment decisions.""",
+Provide sound financial advice specific to agricultural businesses of all types. Help them understand their numbers, identify cost savings, and make smart investment decisions.""",
 
-        "operations": """You are the Operations Manager on this agricultural advisory board with expertise in agricultural logistics. You specialize in:
-- Equipment selection and maintenance scheduling
+        "operations": """You are the Operations Manager on this agricultural advisory board with expertise in agricultural business operations. You specialize in:
+- Equipment selection, maintenance, and fleet management
 - Labor management and workforce planning
 - Supply chain and distribution optimization
-- Harvest timing and post-harvest handling
+- Logistics, scheduling, and workflow efficiency
 - Technology integration and precision agriculture
-- Storage and inventory management
+- Inventory, storage, and facility management
 
-Provide practical operational advice to help farms run more efficiently. Focus on actionable improvements that can be implemented realistically.""",
+Provide practical operational advice to help agricultural businesses run more efficiently. Focus on actionable improvements that can be implemented realistically.""",
 
-        "marketing": """You are the Marketing Strategist on this agricultural advisory board helping farms grow their business. You specialize in:
-- Direct-to-consumer sales strategies
-- Farmers market and CSA program development
-- Wholesale and retail buyer relationships
-- Brand development for farm products
+        "marketing": """You are the Marketing Strategist on this agricultural advisory board helping agricultural businesses grow. You specialize in:
+- Sales channel strategies (direct, wholesale, retail, B2B)
+- Market development and customer acquisition
+- Brand development for ag products and services
 - Digital marketing for agricultural businesses
-- Value-added product opportunities
+- Value-added product and service opportunities
+- Pricing strategy and competitive positioning
 
-Help farmers find new markets, improve their pricing strategies, and build stronger customer relationships.""",
+Help agricultural businesses find new markets, improve their pricing strategies, and build stronger customer relationships.""",
 
-        "sustainability": """You are the Sustainability Advisor on this agricultural advisory board focused on environmentally responsible farming. You specialize in:
-- Organic certification processes
-- Regenerative agriculture practices
-- Carbon sequestration and credits
-- Water conservation techniques
+        "sustainability": """You are the Sustainability Advisor on this agricultural advisory board focused on environmental stewardship across the ag industry. You specialize in:
+- Certification processes (organic, sustainable, fair trade)
+- Regenerative and conservation practices
+- Carbon markets and environmental credits
+- Water and resource conservation
 - Biodiversity and habitat preservation
-- Renewable energy for farms
+- Renewable energy and efficiency for ag businesses
 
-Guide farmers toward sustainable practices that are both environmentally beneficial and economically viable. Help them understand certifications, incentive programs, and long-term benefits.""",
+Guide agricultural businesses toward sustainable practices that are both environmentally beneficial and economically viable. Help them understand certifications, incentive programs, and long-term benefits.""",
 
         "legal": """You are the Legal Specialist on this agricultural advisory board with expertise in both federal and state agricultural regulations. You specialize in:
 - Federal agricultural laws and USDA regulations
 - State-specific agricultural codes and requirements
 - Land use, zoning, and water rights
 - Environmental compliance (EPA, Clean Water Act)
-- Labor laws specific to agricultural workers
-- Farm contracts and liability issues
-- Organic and specialty crop certifications
+- Labor laws specific to agricultural businesses
+- Business contracts, partnerships, and liability
+- Certifications and licensing requirements
 - Agricultural tax law and estate planning
-- Pesticide and chemical regulations
+- Chemical, pesticide, and input regulations
 - Food safety regulations (FDA, FSMA)
 
 Provide clear, practical legal guidance while noting that you are providing general information and not legal advice. Recommend consulting a licensed attorney for specific legal matters. Always consider both federal regulations and state-specific laws when providing guidance."""
@@ -113,20 +99,20 @@ Provide clear, practical legal guidance while noting that you are providing gene
     
     if user_profile:
         state = user_profile.get('state', '')
-        crops = user_profile.get('crops', [])
-        livestock = user_profile.get('livestock', [])
-        farm_name = user_profile.get('farm_name', '')
+        business_name = user_profile.get('business_name', '')
+        business_type = user_profile.get('business_type', '')
+        business_description = user_profile.get('business_description', '')
         business_data = user_profile.get('business_data')
         
-        context = f"\n\nIMPORTANT CONTEXT ABOUT THIS FARMER:\n"
-        if farm_name:
-            context += f"- Farm Name: {farm_name}\n"
+        context = f"\n\nIMPORTANT CONTEXT ABOUT THIS BUSINESS:\n"
+        if business_name:
+            context += f"- Business Name: {business_name}\n"
+        if business_type:
+            context += f"- Business Type: {business_type}\n"
         if state:
             context += f"- Location: {state}\n"
-        if livestock:
-            context += f"- Livestock: {', '.join(livestock)}\n"
-        if crops:
-            context += f"- Crops/Products: {', '.join(crops)}\n"
+        if business_description:
+            context += f"- Description: {business_description}\n"
         
         if business_data:
             context += f"\n\nBUSINESS RECORDS PROVIDED:\n"
@@ -138,16 +124,10 @@ Provide clear, practical legal guidance while noting that you are providing gene
                 context += f"  Row {i+1}: {row_str}\n"
             context += "\nUse this business data to provide specific, data-driven advice. Reference their actual numbers when relevant."
         
-        context += "\nTailor all your advice specifically to their location, crops, and conditions. Reference relevant state-specific regulations, climate considerations, and market conditions when applicable."
+        context += "\nTailor all your advice specifically to their location, business type, and operations. Reference relevant state-specific regulations, market conditions, and industry trends when applicable."
         
         if advisor_key == "legal" and state:
-            operations = []
-            if livestock:
-                operations.append(f"livestock ({', '.join(livestock)})")
-            if crops:
-                operations.append(f"crops ({', '.join(crops)})")
-            operations_str = ' and '.join(operations) if operations else 'their farming operation'
-            context += f"\n\nPay special attention to {state} agricultural laws, water rights, labor regulations, and any state-specific programs or restrictions that apply to their {operations_str}."
+            context += f"\n\nPay special attention to {state} agricultural laws, regulations, and any state-specific programs or restrictions that apply to their {business_type or 'agricultural'} business."
         
         base += context
     
@@ -161,12 +141,12 @@ ADVISORS = {
     },
     "financial": {
         "title": "Finance Director",
-        "specialty": "Farm Economics & Investment",
+        "specialty": "Ag Economics & Investment",
         "icon": "chart-line"
     },
     "operations": {
         "title": "Operations Manager",
-        "specialty": "Farm Operations & Logistics",
+        "specialty": "Ag Operations & Logistics",
         "icon": "cogs"
     },
     "marketing": {
@@ -191,7 +171,7 @@ user_profiles = {}
 
 @app.route('/')
 def index():
-    return render_template('index.html', advisors=ADVISORS, states=US_STATES, livestock=LIVESTOCK_OPTIONS, crops=COMMON_CROPS)
+    return render_template('index.html', advisors=ADVISORS, states=US_STATES)
 
 @app.route('/api/profile', methods=['POST'])
 def save_profile():
@@ -201,10 +181,10 @@ def save_profile():
     existing_profile = user_profiles.get(session_id, {})
     
     user_profiles[session_id] = {
-        'farm_name': data.get('farm_name', ''),
+        'business_name': data.get('business_name', ''),
         'state': data.get('state', ''),
-        'livestock': data.get('livestock', []),
-        'crops': data.get('crops', []),
+        'business_type': data.get('business_type', ''),
+        'business_description': data.get('business_description', ''),
         'business_data': existing_profile.get('business_data', None)
     }
     

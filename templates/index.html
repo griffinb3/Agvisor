@@ -15,13 +15,13 @@
                     <i class="fas fa-tractor"></i>
                 </div>
                 <h2>Welcome to Agvisor</h2>
-                <p>Set up your farm profile to get personalized advice from our AI advisory board</p>
+                <p>Set up your business profile to get personalized advice from our AI advisory board</p>
             </div>
             
             <form id="profileForm">
                 <div class="form-group">
-                    <label for="farmName">Farm Name (Optional)</label>
-                    <input type="text" id="farmName" placeholder="e.g., Green Valley Farm">
+                    <label for="businessName">Business Name (Optional)</label>
+                    <input type="text" id="businessName" placeholder="e.g., Green Valley Ag Supply">
                 </div>
                 
                 <div class="form-group">
@@ -35,22 +35,38 @@
                 </div>
                 
                 <div class="form-group">
-                    <label>Livestock</label>
-                    <p class="form-hint">Enter the livestock you raise (comma separated)</p>
-                    <input type="text" id="livestockInput" placeholder="e.g., Beef Cattle, Dairy Cattle, Chickens">
+                    <label for="businessType">Business Type <span class="required">*</span></label>
+                    <select id="businessType" required>
+                        <option value="">Select your business type...</option>
+                        <option value="Row Crop Farm">Row Crop Farm</option>
+                        <option value="Livestock Operation">Livestock Operation</option>
+                        <option value="Mixed Farming">Mixed Farming (Crops & Livestock)</option>
+                        <option value="Dairy Operation">Dairy Operation</option>
+                        <option value="Specialty Crop / Horticulture">Specialty Crop / Horticulture</option>
+                        <option value="Vineyard / Winery">Vineyard / Winery</option>
+                        <option value="Orchard">Orchard</option>
+                        <option value="Nursery / Greenhouse">Nursery / Greenhouse</option>
+                        <option value="Ag Equipment Dealer / Service">Ag Equipment Dealer / Service</option>
+                        <option value="Ag Input Supplier">Ag Input Supplier (Seed, Feed, Fertilizer)</option>
+                        <option value="Grain Elevator / Storage">Grain Elevator / Storage</option>
+                        <option value="Food Processing / Packing">Food Processing / Packing</option>
+                        <option value="Ag Tech / Precision Ag">Ag Tech / Precision Ag</option>
+                        <option value="Ag Finance / Lending">Ag Finance / Lending</option>
+                        <option value="Ag Consulting">Ag Consulting</option>
+                        <option value="Cooperative">Cooperative</option>
+                        <option value="Other Ag Business">Other Ag Business</option>
+                    </select>
                 </div>
 
                 <div class="form-group">
-                    <label>Crops & Products</label>
-                    <p class="form-hint">Enter the crops you grow (comma separated)</p>
-                    <input type="text" id="cropsInput" placeholder="e.g., Corn, Soybeans, Wheat">
+                    <label for="businessDescription">Describe Your Business <span class="required">*</span></label>
+                    <p class="form-hint">Tell us what you do — products, services, scale, etc.</p>
+                    <textarea id="businessDescription" rows="3" placeholder="e.g., 2,000-acre corn and soybean operation, also sell seed to neighboring farms" required></textarea>
                 </div>
-                
-                <p class="form-hint" style="margin-top: -0.5rem; margin-bottom: 1rem; color: #c44;">* Please enter at least one livestock or crop</p>
                 
                 <div class="form-group">
                     <label>Business Records (Optional)</label>
-                    <p class="form-hint">Upload a CSV or spreadsheet with your farm's financial or production data</p>
+                    <p class="form-hint">Upload a CSV or spreadsheet with your business financial or production data</p>
                     <div class="file-upload-wrapper">
                         <input type="file" id="businessRecords" accept=".csv,.xlsx,.xls">
                         <div class="file-upload-label" id="fileLabel">
@@ -187,15 +203,8 @@
         function updateProfileSummary() {
             if (userProfile && userProfile.state) {
                 let summary = userProfile.state;
-                let items = [];
-                if (userProfile.livestock && userProfile.livestock.length > 0) {
-                    items.push(`${userProfile.livestock.length} livestock`);
-                }
-                if (userProfile.crops && userProfile.crops.length > 0) {
-                    items.push(`${userProfile.crops.length} crop${userProfile.crops.length > 1 ? 's' : ''}`);
-                }
-                if (items.length > 0) {
-                    summary += ` - ${items.join(', ')}`;
+                if (userProfile.business_type) {
+                    summary += ` - ${userProfile.business_type}`;
                 }
                 profileSummary.textContent = summary;
             } else {
@@ -250,26 +259,27 @@
         profileForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const farmName = document.getElementById('farmName').value;
+            const businessName = document.getElementById('businessName').value;
             const state = document.getElementById('stateSelect').value;
-            
-            const livestockInput = document.getElementById('livestockInput').value.trim();
-            const livestock = livestockInput ? livestockInput.split(',').map(s => s.trim()).filter(s => s) : [];
-            
-            const cropsInput = document.getElementById('cropsInput').value.trim();
-            const crops = cropsInput ? cropsInput.split(',').map(s => s.trim()).filter(s => s) : [];
+            const businessType = document.getElementById('businessType').value;
+            const businessDescription = document.getElementById('businessDescription').value.trim();
             
             if (!state) {
                 alert('Please select your state');
                 return;
             }
             
-            if (crops.length === 0 && livestock.length === 0) {
-                alert('Please enter at least one livestock or crop');
+            if (!businessType) {
+                alert('Please select your business type');
                 return;
             }
             
-            userProfile = { farm_name: farmName, state, livestock, crops };
+            if (!businessDescription) {
+                alert('Please describe your business');
+                return;
+            }
+            
+            userProfile = { business_name: businessName, state, business_type: businessType, business_description: businessDescription };
             
             try {
                 if (uploadedFile) {
@@ -298,10 +308,10 @@
 
         editProfileBtn.addEventListener('click', () => {
             if (userProfile) {
-                document.getElementById('farmName').value = userProfile.farm_name || '';
+                document.getElementById('businessName').value = userProfile.business_name || '';
                 document.getElementById('stateSelect').value = userProfile.state || '';
-                document.getElementById('livestockInput').value = (userProfile.livestock || []).join(', ');
-                document.getElementById('cropsInput').value = (userProfile.crops || []).join(', ');
+                document.getElementById('businessType').value = userProfile.business_type || '';
+                document.getElementById('businessDescription').value = userProfile.business_description || '';
             }
             showModal();
         });
