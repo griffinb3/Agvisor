@@ -1,19 +1,17 @@
-import os
 import re
 import csv
 import io
-import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, jsonify, session
-from openai import OpenAI
+import os
+
+from agents import (
+    ADVISOR_CLASSES, BASE_ADVISORS, OPTIONAL_ADVISORS, ALL_ADVISORS,
+    BASE_ADVISOR_IDS, OPTIONAL_ADVISOR_IDS, BoardChair
+)
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
-
-client = OpenAI(
-    api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
-    base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
-)
 
 US_STATES = [
     "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
@@ -27,59 +25,6 @@ US_STATES = [
     "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
     "West Virginia", "Wisconsin", "Wyoming"
 ]
-
-BASE_ADVISORS = {
-    "financial": {
-        "title": "Finance Director",
-        "specialty": "Ag Economics & Investment",
-        "icon": "chart-line"
-    },
-    "operations": {
-        "title": "Operations Manager",
-        "specialty": "Ag Operations & Logistics",
-        "icon": "cogs"
-    },
-    "marketing": {
-        "title": "Marketing Specialist",
-        "specialty": "Sales & Market Development",
-        "icon": "bullhorn"
-    },
-    "legal": {
-        "title": "Legal Specialist",
-        "specialty": "Federal & State Regulations",
-        "icon": "gavel"
-    },
-    "risk": {
-        "title": "Risk Advisor",
-        "specialty": "Risk Management & Insurance",
-        "icon": "shield-alt"
-    }
-}
-
-OPTIONAL_ADVISORS = {
-    "commodity_risk": {
-        "title": "Commodity Risk Advisor",
-        "specialty": "Commodity Markets & Hedging",
-        "icon": "chart-bar"
-    },
-    "livestock": {
-        "title": "Livestock & Animal Systems Advisor",
-        "specialty": "Animal Production & Health",
-        "icon": "horse"
-    },
-    "sustainability": {
-        "title": "Sustainability Advisor",
-        "specialty": "Environmental Stewardship",
-        "icon": "seedling"
-    },
-    "agronomist": {
-        "title": "Agronomist",
-        "specialty": "Crop Science & Soil Health",
-        "icon": "leaf"
-    }
-}
-
-ALL_ADVISORS = {**BASE_ADVISORS, **OPTIONAL_ADVISORS}
 
 BOARD_SUGGESTIONS = {
     "Row Crop Farm": {
@@ -152,269 +97,59 @@ BOARD_SUGGESTIONS = {
     }
 }
 
-
-def get_advisor_system_prompt(advisor_key, user_profile=None):
-    base_prompts = {
-        "financial": """You are the Finance Director on this agricultural advisory board with extensive experience in agricultural economics. You specialize in:
-- Business budgeting and cash flow management
-- Agricultural loans, financing, and capital planning
-- Risk management, insurance, and hedging
-- Investment analysis for equipment, land, and expansion
-- Grant opportunities and government programs
-- Commodity and input market analysis
-
-Provide sound financial advice specific to agricultural businesses of all types. Help them understand their numbers, identify cost savings, and make smart investment decisions.""",
-
-        "operations": """You are the Operations Manager on this agricultural advisory board with expertise in agricultural business operations. You specialize in:
-- Equipment selection, maintenance, and fleet management
-- Labor management and workforce planning
-- Supply chain and distribution optimization
-- Logistics, scheduling, and workflow efficiency
-- Technology integration and precision agriculture
-- Inventory, storage, and facility management
-
-Provide practical operational advice to help agricultural businesses run more efficiently. Focus on actionable improvements that can be implemented realistically.""",
-
-        "marketing": """You are the Marketing Specialist on this agricultural advisory board helping agricultural businesses grow. You specialize in:
-- Sales channel strategies (direct, wholesale, retail, B2B)
-- Market development and customer acquisition
-- Brand development for ag products and services
-- Digital marketing for agricultural businesses
-- Value-added product and service opportunities
-- Pricing strategy and competitive positioning
-
-Help agricultural businesses find new markets, improve their pricing strategies, and build stronger customer relationships.""",
-
-        "legal": """You are the Legal Specialist on this agricultural advisory board with expertise in both federal and state agricultural regulations. You specialize in:
-- Federal agricultural laws and USDA regulations
-- State-specific agricultural codes and requirements
-- Land use, zoning, and water rights
-- Environmental compliance (EPA, Clean Water Act)
-- Labor laws specific to agricultural businesses
-- Business contracts, partnerships, and liability
-- Certifications and licensing requirements
-- Agricultural tax law and estate planning
-- Chemical, pesticide, and input regulations
-- Food safety regulations (FDA, FSMA)
-
-Provide clear, practical legal guidance while noting that you are providing general information and not legal advice. Recommend consulting a licensed attorney for specific legal matters. Always consider both federal regulations and state-specific laws when providing guidance.""",
-
-        "risk": """You are the Risk Advisor on this agricultural advisory board with deep expertise in agricultural risk management. You specialize in:
-- Enterprise risk assessment and mitigation
-- Crop and livestock insurance programs (MPCI, PRF, LRP, LGM)
-- Business continuity and disaster planning
-- Weather and climate risk strategies
-- Liability and property risk management
-- Succession planning and key-person risk
-- Cybersecurity and data protection for ag businesses
-
-Help agricultural businesses identify, quantify, and manage the full spectrum of risks they face. Provide practical risk mitigation strategies and insurance guidance.""",
-
-        "commodity_risk": """You are the Commodity Risk Advisor on this agricultural advisory board with extensive experience in commodity markets and price risk management. You specialize in:
-- Futures and options hedging strategies
-- Basis analysis and management
-- Cash marketing strategies and contracting
-- Input cost risk management (fuel, fertilizer, feed)
-- Margin management and profit targeting
-- Market analysis and price outlook
-- Crop and livestock marketing plans
-
-Help agricultural businesses develop and execute effective commodity risk management strategies. Explain complex hedging concepts in practical terms and tailor recommendations to their specific exposure.""",
-
-        "livestock": """You are the Livestock & Animal Systems Advisor on this agricultural advisory board with deep expertise in animal agriculture. You specialize in:
-- Herd and flock management strategies
-- Animal nutrition and feed formulation
-- Breeding, genetics, and reproductive management
-- Animal health and disease prevention
-- Pasture and rangeland management
-- Facility design and animal welfare
-- Production record analysis and benchmarking
-
-Provide expert, practical advice on all aspects of livestock and animal production systems. Be specific with recommendations and explain the science behind your suggestions when helpful.""",
-
-        "sustainability": """You are the Sustainability Advisor on this agricultural advisory board focused on environmental stewardship across the ag industry. You specialize in:
-- Certification processes (organic, sustainable, fair trade)
-- Regenerative and conservation practices
-- Carbon markets and environmental credits
-- Water and resource conservation
-- Biodiversity and habitat preservation
-- Renewable energy and efficiency for ag businesses
-- ESG reporting and sustainability metrics
-
-Guide agricultural businesses toward sustainable practices that are both environmentally beneficial and economically viable. Help them understand certifications, incentive programs, and long-term benefits.""",
-
-        "agronomist": """You are the Agronomist on this agricultural advisory board with 25 years of experience in crop science, soil health, and agronomy. You specialize in:
-- Crop production strategies and planning
-- Soil testing and amendment recommendations
-- Pest, disease, and weed management
-- Sustainable and regenerative practices
-- Yield optimization and input management
-- Ag product quality and performance
-- Precision agriculture and data-driven decisions
-
-Provide expert, practical advice tailored to agricultural businesses of all types. Be specific with recommendations and explain the science behind your suggestions when helpful."""
-    }
-
-    base = base_prompts.get(advisor_key, base_prompts["financial"])
-
-    if user_profile:
-        state = user_profile.get('state', '')
-        business_name = user_profile.get('business_name', '')
-        business_type = user_profile.get('business_type', '')
-        business_description = user_profile.get('business_description', '')
-        business_data = user_profile.get('business_data')
-
-        context = f"\n\nIMPORTANT CONTEXT ABOUT THIS BUSINESS:\n"
-        if business_name:
-            context += f"- Business Name: {business_name}\n"
-        if business_type:
-            context += f"- Business Type: {business_type}\n"
-        if state:
-            context += f"- Location: {state}\n"
-        if business_description:
-            context += f"- Description: {business_description}\n"
-
-        if business_data:
-            context += f"\n\nBUSINESS RECORDS PROVIDED:\n"
-            context += f"- {business_data.get('summary', 'Business data uploaded')}\n"
-            context += f"- Data columns: {', '.join(business_data.get('headers', []))}\n"
-            context += f"\nSample data from their records:\n"
-            for i, row in enumerate(business_data.get('preview', [])[:5]):
-                row_str = ', '.join([f"{k}: {v}" for k, v in list(row.items())[:5]])
-                context += f"  Row {i+1}: {row_str}\n"
-            context += "\nUse this business data to provide specific, data-driven advice. Reference their actual numbers when relevant."
-
-        context += "\nTailor all your advice specifically to their location, business type, and operations. Reference relevant state-specific regulations, market conditions, and industry trends when applicable."
-
-        if advisor_key == "legal" and state:
-            context += f"\n\nPay special attention to {state} agricultural laws, regulations, and any state-specific programs or restrictions that apply to their {business_type or 'agricultural'} business."
-
-        base += context
-
-    return base
-
-
-BOARD_CHAIR_ROUTING_PROMPT = """You are the Board Chair of an agricultural advisory board. Your role is to analyze incoming questions and determine which advisors on the board are most relevant to respond.
-
-You must return valid JSON only — no other text.
-
-Given the user's question and their business profile, select 2-4 of the most relevant advisors from the active board to respond. Consider:
-1. Which advisors have direct expertise related to the question
-2. The user's business type and how it relates to each advisor's specialty
-3. Cross-functional implications (e.g., a land purchase question involves finance, legal, and possibly operations)
-
-Return a JSON object with this exact structure:
-{"selected": ["advisor_id_1", "advisor_id_2"], "rationale": "Brief explanation of why these advisors were selected"}
-
-Only select from the active advisor IDs provided. Select 2-4 advisors unless the question truly requires more perspectives."""
-
-BOARD_CHAIR_SYNTHESIS_PROMPT = """You are the Board Chair of an agricultural advisory board. Your role is to synthesize the responses from multiple advisors into a clear, actionable board summary.
-
-After reviewing all advisor responses to the user's question, produce a concise synthesis that includes:
-1. **Key Recommendations** — The most important action items across all responses
-2. **Points of Agreement** — Where advisors align in their advice
-3. **Points to Consider** — Any differing perspectives or trade-offs the user should weigh
-4. **Suggested Next Steps** — 2-3 concrete next steps the user should take
-
-Keep the summary concise (3-5 bullet points total). Be direct and actionable. Do not simply repeat what the advisors said — synthesize and prioritize. Reference which advisor raised key points when helpful."""
-
-
-def get_board_chair_routing(message, active_advisors, user_profile=None):
-    advisor_descriptions = []
-    for aid, info in active_advisors.items():
-        advisor_descriptions.append(f"- {aid}: {info['title']} ({info['specialty']})")
-    advisor_list_str = "\n".join(advisor_descriptions)
-
-    context = ""
-    if user_profile:
-        parts = []
-        if user_profile.get('business_name'):
-            parts.append(f"Business: {user_profile['business_name']}")
-        if user_profile.get('business_type'):
-            parts.append(f"Type: {user_profile['business_type']}")
-        if user_profile.get('state'):
-            parts.append(f"State: {user_profile['state']}")
-        if user_profile.get('business_description'):
-            parts.append(f"Description: {user_profile['business_description']}")
-        if parts:
-            context = f"\n\nBusiness Profile:\n" + "\n".join(parts)
-
-    user_content = f"""Active advisors on the board:
-{advisor_list_str}
-{context}
-
-User's question: {message}
-
-Select 2-4 advisors and return JSON only."""
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": BOARD_CHAIR_ROUTING_PROMPT},
-                {"role": "user", "content": user_content}
-            ],
-            max_completion_tokens=256
-        )
-
-        raw = response.choices[0].message.content.strip()
-        if raw.startswith("```"):
-            raw = re.sub(r'^```(?:json)?\s*', '', raw)
-            raw = re.sub(r'\s*```$', '', raw)
-
-        result = json.loads(raw)
-        selected = [aid for aid in result.get("selected", []) if aid in active_advisors]
-        rationale = result.get("rationale", "")
-
-        if len(selected) < 2:
-            selected = list(active_advisors.keys())[:4]
-            rationale = "Routing to core advisors for broad coverage."
-
-        return selected, rationale
-    except Exception:
-        selected = list(active_advisors.keys())[:4]
-        return selected, "Consulting core advisors for a comprehensive perspective."
-
-
-def synthesize_responses(message, advisor_responses, user_profile=None):
-    responses_text = ""
-    for resp in advisor_responses:
-        responses_text += f"\n\n**{resp['title']}:**\n{resp['response']}"
-
-    context = ""
-    if user_profile:
-        parts = []
-        if user_profile.get('business_type'):
-            parts.append(f"Business Type: {user_profile['business_type']}")
-        if user_profile.get('state'):
-            parts.append(f"State: {user_profile['state']}")
-        if parts:
-            context = "\nBusiness context: " + ", ".join(parts)
-
-    user_content = f"""User's original question: {message}
-{context}
-
-Advisor responses:{responses_text}
-
-Provide a concise board summary synthesizing the above responses."""
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": BOARD_CHAIR_SYNTHESIS_PROMPT},
-                {"role": "user", "content": user_content}
-            ],
-            max_completion_tokens=512
-        )
-
-        return response.choices[0].message.content
-    except Exception:
-        return None
-
-
 conversation_histories = {}
 user_profiles = {}
+
+ADVISOR_ORDER = BASE_ADVISOR_IDS + OPTIONAL_ADVISOR_IDS
+
+
+def get_active_advisors(session_id):
+    user_profile = user_profiles.get(session_id, {})
+    selected = user_profile.get('selected_advisors', [])
+    active = {aid: ALL_ADVISORS[aid] for aid in BASE_ADVISOR_IDS}
+    for advisor_id in selected:
+        if advisor_id in OPTIONAL_ADVISORS:
+            active[advisor_id] = OPTIONAL_ADVISORS[advisor_id]
+    return active
+
+
+def detect_specific_advisor(message, active_advisors):
+    message_lower = message.lower()
+
+    title_keywords = {
+        'financial': ['finance director', 'finance'],
+        'operations': ['operations manager', 'operations'],
+        'marketing': ['marketing specialist', 'marketing'],
+        'legal': ['legal specialist', 'legal', 'lawyer', 'attorney'],
+        'risk': ['risk advisor', 'risk management'],
+        'commodity_risk': ['commodity risk', 'commodity advisor', 'hedging', 'futures'],
+        'livestock': ['livestock advisor', 'livestock', 'animal systems', 'animal advisor', 'herd'],
+        'sustainability': ['sustainability advisor', 'sustainability'],
+        'agronomist': ['agronomist', 'agronomy']
+    }
+
+    for advisor_id, keywords in title_keywords.items():
+        if advisor_id not in active_advisors:
+            continue
+        for keyword in keywords:
+            pattern = rf'\b{re.escape(keyword)}\b'
+            if re.search(pattern, message_lower):
+                if any(phrase in message_lower for phrase in ['ask the', 'talk to', 'speak to', 'from the', 'hey ', 'question for']):
+                    return advisor_id
+
+    return None
+
+
+def get_advisor_response(advisor_id, message, session_id, user_profile):
+    advisor_class = ADVISOR_CLASSES.get(advisor_id)
+    if advisor_class:
+        return advisor_class.get_response(message, session_id, user_profile, conversation_histories)
+    return {
+        'advisor_id': advisor_id,
+        'response': "Advisor not found.",
+        'title': "Unknown",
+        'icon': "question"
+    }
 
 
 @app.route('/')
@@ -507,126 +242,18 @@ def chat():
     if not message:
         return jsonify({'error': 'No message provided'}), 400
 
-    advisor = ALL_ADVISORS.get(advisor_id, ALL_ADVISORS['financial'])
     user_profile = user_profiles.get(session_id)
+    result = get_advisor_response(advisor_id, message, session_id, user_profile)
 
-    history_key = f"{session_id}_{advisor_id}"
-    if history_key not in conversation_histories:
-        conversation_histories[history_key] = []
+    if 'Error' in result.get('response', ''):
+        return jsonify({'error': result['response']}), 500
 
-    system_prompt = get_advisor_system_prompt(advisor_id, user_profile)
-
-    messages = [
-        {"role": "system", "content": system_prompt}
-    ]
-    messages.extend(conversation_histories[history_key])
-    messages.append({"role": "user", "content": message})
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            max_completion_tokens=2048
-        )
-
-        assistant_message = response.choices[0].message.content
-
-        conversation_histories[history_key].append({"role": "user", "content": message})
-        conversation_histories[history_key].append({"role": "assistant", "content": assistant_message})
-
-        if len(conversation_histories[history_key]) > 20:
-            conversation_histories[history_key] = conversation_histories[history_key][-20:]
-
-        return jsonify({
-            'response': assistant_message,
-            'advisor': {
-                'title': advisor['title']
-            }
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-def get_active_advisors(session_id):
-    user_profile = user_profiles.get(session_id, {})
-    selected = user_profile.get('selected_advisors', [])
-    active = dict(BASE_ADVISORS)
-    for advisor_id in selected:
-        if advisor_id in OPTIONAL_ADVISORS:
-            active[advisor_id] = OPTIONAL_ADVISORS[advisor_id]
-    return active
-
-
-def detect_specific_advisor(message, active_advisors):
-    message_lower = message.lower()
-
-    title_keywords = {
-        'financial': ['finance director', 'finance'],
-        'operations': ['operations manager', 'operations'],
-        'marketing': ['marketing specialist', 'marketing'],
-        'legal': ['legal specialist', 'legal', 'lawyer', 'attorney'],
-        'risk': ['risk advisor', 'risk management'],
-        'commodity_risk': ['commodity risk', 'commodity advisor', 'hedging', 'futures'],
-        'livestock': ['livestock advisor', 'livestock', 'animal systems', 'animal advisor', 'herd'],
-        'sustainability': ['sustainability advisor', 'sustainability'],
-        'agronomist': ['agronomist', 'agronomy']
-    }
-
-    for advisor_id, keywords in title_keywords.items():
-        if advisor_id not in active_advisors:
-            continue
-        for keyword in keywords:
-            pattern = rf'\b{re.escape(keyword)}\b'
-            if re.search(pattern, message_lower):
-                if any(phrase in message_lower for phrase in ['ask the', 'talk to', 'speak to', 'from the', 'hey ', 'question for']):
-                    return advisor_id
-
-    return None
-
-
-def get_advisor_response(advisor_id, message, session_id, user_profile):
-    advisor = ALL_ADVISORS.get(advisor_id, ALL_ADVISORS['financial'])
-
-    history_key = f"{session_id}_{advisor_id}"
-    if history_key not in conversation_histories:
-        conversation_histories[history_key] = []
-
-    system_prompt = get_advisor_system_prompt(advisor_id, user_profile)
-
-    messages = [
-        {"role": "system", "content": system_prompt}
-    ]
-    messages.extend(conversation_histories[history_key])
-    messages.append({"role": "user", "content": message})
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            max_completion_tokens=1024
-        )
-
-        assistant_message = response.choices[0].message.content
-
-        conversation_histories[history_key].append({"role": "user", "content": message})
-        conversation_histories[history_key].append({"role": "assistant", "content": assistant_message})
-
-        if len(conversation_histories[history_key]) > 20:
-            conversation_histories[history_key] = conversation_histories[history_key][-20:]
-
-        return {
-            'advisor_id': advisor_id,
-            'response': assistant_message,
-            'title': advisor['title'],
-            'icon': advisor['icon']
+    return jsonify({
+        'response': result['response'],
+        'advisor': {
+            'title': result['title']
         }
-    except Exception as e:
-        return {
-            'advisor_id': advisor_id,
-            'response': f"Error getting response: {str(e)}",
-            'title': advisor['title'],
-            'icon': advisor['icon']
-        }
+    })
 
 
 @app.route('/api/chat/all', methods=['POST'])
@@ -656,12 +283,12 @@ def chat_all():
         selected_ids = list(active_advisors.keys())
         routing_rationale = "All active advisors are weighing in on this question."
     else:
-        selected_ids, routing_rationale = get_board_chair_routing(message, active_advisors, user_profile)
+        selected_ids, routing_rationale = BoardChair.route(message, active_advisors, user_profile)
 
     selected_advisors = {aid: active_advisors[aid] for aid in selected_ids if aid in active_advisors}
 
     if not selected_advisors:
-        selected_advisors = dict(BASE_ADVISORS)
+        selected_advisors = {aid: ALL_ADVISORS[aid] for aid in BASE_ADVISOR_IDS}
         routing_rationale = "Consulting core advisors for a comprehensive perspective."
 
     responses = []
@@ -686,10 +313,9 @@ def chat_all():
                     'icon': advisor['icon']
                 })
 
-    advisor_order = ['financial', 'operations', 'marketing', 'legal', 'risk', 'commodity_risk', 'livestock', 'sustainability', 'agronomist']
-    responses.sort(key=lambda x: advisor_order.index(x['advisor_id']) if x['advisor_id'] in advisor_order else 99)
+    responses.sort(key=lambda x: ADVISOR_ORDER.index(x['advisor_id']) if x['advisor_id'] in ADVISOR_ORDER else 99)
 
-    summary = synthesize_responses(message, responses, user_profile)
+    summary = BoardChair.synthesize(message, responses, user_profile)
 
     selected_titles = [active_advisors[aid]['title'] for aid in selected_ids if aid in active_advisors]
 
@@ -726,22 +352,8 @@ def clear_history():
 @app.route('/api/advisors')
 def get_advisors():
     return jsonify({
-        'base': {
-            advisor_id: {
-                'title': advisor['title'],
-                'specialty': advisor['specialty'],
-                'icon': advisor['icon']
-            }
-            for advisor_id, advisor in BASE_ADVISORS.items()
-        },
-        'optional': {
-            advisor_id: {
-                'title': advisor['title'],
-                'specialty': advisor['specialty'],
-                'icon': advisor['icon']
-            }
-            for advisor_id, advisor in OPTIONAL_ADVISORS.items()
-        }
+        'base': BASE_ADVISORS,
+        'optional': OPTIONAL_ADVISORS
     })
 
 

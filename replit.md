@@ -54,13 +54,26 @@ PostgreSQL database with fake financial data for testing and development:
 ## Project Architecture
 ```
 /
-├── main.py              # Flask application with API endpoints + orchestration logic
+├── main.py                  # Flask app, API routes, orchestration logic
+├── agents/                  # Agent modules (one file per agent)
+│   ├── __init__.py          # Registry of all agents, exports constants
+│   ├── base.py              # BaseAdvisor class, shared OpenAI client
+│   ├── board_chair.py       # Board Chair — routing & synthesis
+│   ├── financial.py         # Finance Director agent
+│   ├── operations.py        # Operations Manager agent
+│   ├── marketing.py         # Marketing Specialist agent
+│   ├── legal.py             # Legal Specialist agent (with state-specific logic)
+│   ├── risk.py              # Risk Advisor agent
+│   ├── commodity_risk.py    # Commodity Risk Advisor agent
+│   ├── livestock.py         # Livestock & Animal Systems agent
+│   ├── sustainability.py    # Sustainability Advisor agent
+│   └── agronomist.py        # Agronomist agent
 ├── templates/
-│   └── index.html       # Chat interface frontend with onboarding modal
+│   └── index.html           # Chat interface frontend with onboarding modal
 ├── static/
-│   └── style.css        # Styling
-├── pyproject.toml       # Python dependencies
-└── replit.md            # This file
+│   └── style.css            # Styling
+├── pyproject.toml           # Python dependencies
+└── replit.md                # This file
 ```
 
 ## Key Features
@@ -92,6 +105,7 @@ PostgreSQL database with fake financial data for testing and development:
 The app runs on port 5000 using the "Start application" workflow (`python main.py`).
 
 ## Recent Changes
+- February 24, 2026: Refactored to modular agent architecture — each agent in its own Python file under `agents/` directory
 - February 24, 2026: Upgraded to multi-agent orchestration — Board Chair routes questions to relevant advisors, synthesizes Board Summary, added "Ask All Advisors" toggle
 - February 11, 2026: Created development database with 20 fake ag businesses, 5 years of financial statements, production records, and key ratios across 4 performance categories
 - February 11, 2026: Added drag-and-drop for optional advisors in sidebar — drag from "Available Specialists" to add, click X to remove
