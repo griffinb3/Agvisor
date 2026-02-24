@@ -161,8 +161,8 @@
                 <div class="chat-header">
                     <div class="current-advisor">
                         <span>Advisory Board Mode: </span>
-                        <strong>All Advisors</strong>
-                        <span class="advisor-title">Ask a question to get input from all board members</span>
+                        <strong>Multi-Agent Orchestration</strong>
+                        <span class="orchestration-badge"><i class="fas fa-project-diagram"></i> Board Chair routes your questions</span>
                     </div>
                 </div>
 
@@ -185,6 +185,11 @@
 
                 <div class="chat-input-area">
                     <form id="chatForm">
+                        <div class="input-controls">
+                            <button type="button" class="ask-all-toggle" id="askAllToggle" title="Override smart routing and ask all advisors">
+                                <i class="fas fa-users"></i> Ask All Advisors
+                            </button>
+                        </div>
                         <div class="input-wrapper">
                             <textarea 
                                 id="messageInput" 
@@ -206,6 +211,7 @@
         let currentAdvisor = 'financial';
         let isLoading = false;
         let userProfile = null;
+        let askAllMode = false;
 
         const baseAdvisors = {
             {% for id, advisor in base_advisors.items() %}
@@ -634,6 +640,12 @@
             }
         });
 
+        const askAllToggle = document.getElementById('askAllToggle');
+        askAllToggle.addEventListener('click', () => {
+            askAllMode = !askAllMode;
+            askAllToggle.classList.toggle('active', askAllMode);
+        });
+
         chatForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -660,7 +672,8 @@
                     },
                     body: JSON.stringify({
                         message: message,
-                        session_id: sessionId
+                        session_id: sessionId,
+                        ask_all: askAllMode
                     })
                 });
 
@@ -670,6 +683,8 @@
 
                 if (data.error) {
                     addMessage('Sorry, there was an error processing your request. Please try again.', 'error');
+                } else if (data.mode === 'orchestrated') {
+                    addOrchestratedResponse(data);
                 } else {
                     addAllAdvisorResponses(data.responses);
                 }
@@ -748,6 +763,55 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
+        function addOrchestratedResponse(data) {
+            const containerDiv = document.createElement('div');
+            containerDiv.className = 'advisor-responses-container';
+
+            if (data.routing && data.routing.selected_titles) {
+                const routingDiv = document.createElement('div');
+                routingDiv.className = 'routing-info';
+                const titles = data.routing.selected_titles.join(', ');
+                const rationale = data.routing.rationale || '';
+                routingDiv.innerHTML = `
+                    <i class="fas fa-project-diagram"></i>
+                    <div class="routing-text">
+                        <div><strong>Board Chair</strong> directed this to: <span class="routing-advisors">${escapeHtml(titles)}</span></div>
+                        ${rationale ? `<div class="routing-rationale">${escapeHtml(rationale)}</div>` : ''}
+                    </div>
+                `;
+                containerDiv.appendChild(routingDiv);
+            }
+
+            data.responses.forEach(resp => {
+                const responseDiv = document.createElement('div');
+                responseDiv.className = 'advisor-response';
+                responseDiv.innerHTML = `
+                    <div class="advisor-response-header">
+                        <i class="fas fa-${resp.icon}"></i>
+                        <span class="advisor-title">${resp.title}</span>
+                    </div>
+                    <div class="advisor-response-content">${formatMessage(resp.response)}</div>
+                `;
+                containerDiv.appendChild(responseDiv);
+            });
+
+            if (data.summary) {
+                const summaryDiv = document.createElement('div');
+                summaryDiv.className = 'board-summary';
+                summaryDiv.innerHTML = `
+                    <div class="board-summary-header">
+                        <i class="fas fa-clipboard-check"></i>
+                        <span>Board Summary</span>
+                    </div>
+                    <div class="board-summary-content">${formatMessage(data.summary)}</div>
+                `;
+                containerDiv.appendChild(summaryDiv);
+            }
+
+            chatMessages.appendChild(containerDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
         function addLoadingMessage() {
             const id = 'loading_' + Date.now();
             const messageDiv = document.createElement('div');
@@ -756,8 +820,8 @@
             
             messageDiv.innerHTML = `
                 <div class="message-header">
-                    <i class="fas fa-users"></i>
-                    <span class="advisor-name">Advisory Board</span>
+                    <i class="fas fa-project-diagram"></i>
+                    <span class="advisor-name">Board Chair is coordinating advisors...</span>
                 </div>
                 <div class="message-content">
                     <div class="typing-indicator">

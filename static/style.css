@@ -1074,3 +1074,135 @@ body {
     background: var(--primary-green);
     color: white;
 }
+
+.routing-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: rgba(201, 162, 39, 0.08);
+    border: 1px solid rgba(201, 162, 39, 0.25);
+    border-radius: 10px;
+    margin-bottom: 0.75rem;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--text-dark);
+    animation: fadeIn 0.3s ease;
+}
+
+.routing-info i {
+    color: var(--accent-gold);
+    font-size: 1rem;
+    margin-top: 0.1rem;
+    flex-shrink: 0;
+}
+
+.routing-info .routing-text {
+    flex: 1;
+}
+
+.routing-info .routing-advisors {
+    font-weight: 600;
+    color: var(--primary-green);
+}
+
+.routing-info .routing-rationale {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    margin-top: 0.2rem;
+}
+
+.board-summary {
+    background: linear-gradient(135deg, rgba(45, 90, 39, 0.04) 0%, rgba(201, 162, 39, 0.06) 100%);
+    border: 2px solid rgba(45, 90, 39, 0.2);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-top: 0.25rem;
+    animation: fadeIn 0.3s ease;
+}
+
+.board-summary-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, var(--primary-green) 0%, var(--light-green) 100%);
+    color: white;
+}
+
+.board-summary-header i {
+    font-size: 1.1rem;
+    color: var(--accent-gold);
+}
+
+.board-summary-header span {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.board-summary-content {
+    padding: 1rem;
+    line-height: 1.7;
+    color: var(--text-dark);
+    font-size: 0.95rem;
+}
+
+.board-summary-content strong {
+    color: var(--primary-green);
+}
+
+.ask-all-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: transparent;
+    border: 1.5px solid var(--border-color);
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.ask-all-toggle:hover {
+    border-color: var(--light-green);
+    color: var(--primary-green);
+}
+
+.ask-all-toggle.active {
+    background: var(--primary-green);
+    border-color: var(--primary-green);
+    color: white;
+}
+
+.ask-all-toggle i {
+    font-size: 0.85rem;
+}
+
+.input-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.orchestration-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.6rem;
+    background: rgba(45, 90, 39, 0.08);
+    border: 1px solid rgba(45, 90, 39, 0.15);
+    border-radius: 12px;
+    font-size: 0.75rem;
+    color: var(--primary-green);
+    font-weight: 500;
+}
+
+.orchestration-badge i {
+    font-size: 0.7rem;
+    color: var(--accent-gold);
+}

@@ -2,6 +2,7 @@ import os
 import re
 import csv
 import io
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, jsonify, session
 from openai import OpenAI
@@ -293,6 +294,125 @@ Provide expert, practical advice tailored to agricultural businesses of all type
     return base
 
 
+BOARD_CHAIR_ROUTING_PROMPT = """You are the Board Chair of an agricultural advisory board. Your role is to analyze incoming questions and determine which advisors on the board are most relevant to respond.
+
+You must return valid JSON only — no other text.
+
+Given the user's question and their business profile, select 2-4 of the most relevant advisors from the active board to respond. Consider:
+1. Which advisors have direct expertise related to the question
+2. The user's business type and how it relates to each advisor's specialty
+3. Cross-functional implications (e.g., a land purchase question involves finance, legal, and possibly operations)
+
+Return a JSON object with this exact structure:
+{"selected": ["advisor_id_1", "advisor_id_2"], "rationale": "Brief explanation of why these advisors were selected"}
+
+Only select from the active advisor IDs provided. Select 2-4 advisors unless the question truly requires more perspectives."""
+
+BOARD_CHAIR_SYNTHESIS_PROMPT = """You are the Board Chair of an agricultural advisory board. Your role is to synthesize the responses from multiple advisors into a clear, actionable board summary.
+
+After reviewing all advisor responses to the user's question, produce a concise synthesis that includes:
+1. **Key Recommendations** — The most important action items across all responses
+2. **Points of Agreement** — Where advisors align in their advice
+3. **Points to Consider** — Any differing perspectives or trade-offs the user should weigh
+4. **Suggested Next Steps** — 2-3 concrete next steps the user should take
+
+Keep the summary concise (3-5 bullet points total). Be direct and actionable. Do not simply repeat what the advisors said — synthesize and prioritize. Reference which advisor raised key points when helpful."""
+
+
+def get_board_chair_routing(message, active_advisors, user_profile=None):
+    advisor_descriptions = []
+    for aid, info in active_advisors.items():
+        advisor_descriptions.append(f"- {aid}: {info['title']} ({info['specialty']})")
+    advisor_list_str = "\n".join(advisor_descriptions)
+
+    context = ""
+    if user_profile:
+        parts = []
+        if user_profile.get('business_name'):
+            parts.append(f"Business: {user_profile['business_name']}")
+        if user_profile.get('business_type'):
+            parts.append(f"Type: {user_profile['business_type']}")
+        if user_profile.get('state'):
+            parts.append(f"State: {user_profile['state']}")
+        if user_profile.get('business_description'):
+            parts.append(f"Description: {user_profile['business_description']}")
+        if parts:
+            context = f"\n\nBusiness Profile:\n" + "\n".join(parts)
+
+    user_content = f"""Active advisors on the board:
+{advisor_list_str}
+{context}
+
+User's question: {message}
+
+Select 2-4 advisors and return JSON only."""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": BOARD_CHAIR_ROUTING_PROMPT},
+                {"role": "user", "content": user_content}
+            ],
+            max_completion_tokens=256
+        )
+
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            raw = re.sub(r'^```(?:json)?\s*', '', raw)
+            raw = re.sub(r'\s*```$', '', raw)
+
+        result = json.loads(raw)
+        selected = [aid for aid in result.get("selected", []) if aid in active_advisors]
+        rationale = result.get("rationale", "")
+
+        if len(selected) < 2:
+            selected = list(active_advisors.keys())[:4]
+            rationale = "Routing to core advisors for broad coverage."
+
+        return selected, rationale
+    except Exception:
+        selected = list(active_advisors.keys())[:4]
+        return selected, "Consulting core advisors for a comprehensive perspective."
+
+
+def synthesize_responses(message, advisor_responses, user_profile=None):
+    responses_text = ""
+    for resp in advisor_responses:
+        responses_text += f"\n\n**{resp['title']}:**\n{resp['response']}"
+
+    context = ""
+    if user_profile:
+        parts = []
+        if user_profile.get('business_type'):
+            parts.append(f"Business Type: {user_profile['business_type']}")
+        if user_profile.get('state'):
+            parts.append(f"State: {user_profile['state']}")
+        if parts:
+            context = "\nBusiness context: " + ", ".join(parts)
+
+    user_content = f"""User's original question: {message}
+{context}
+
+Advisor responses:{responses_text}
+
+Provide a concise board summary synthesizing the above responses."""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": BOARD_CHAIR_SYNTHESIS_PROMPT},
+                {"role": "user", "content": user_content}
+            ],
+            max_completion_tokens=512
+        )
+
+        return response.choices[0].message.content
+    except Exception:
+        return None
+
+
 conversation_histories = {}
 user_profiles = {}
 
@@ -514,6 +634,7 @@ def chat_all():
     data = request.json
     message = data.get('message', '')
     session_id = data.get('session_id', 'default')
+    ask_all = data.get('ask_all', False)
 
     if not message:
         return jsonify({'error': 'No message provided'}), 400
@@ -530,12 +651,25 @@ def chat_all():
             'responses': [result]
         })
 
+    routing_rationale = None
+    if ask_all or len(active_advisors) <= 3:
+        selected_ids = list(active_advisors.keys())
+        routing_rationale = "All active advisors are weighing in on this question."
+    else:
+        selected_ids, routing_rationale = get_board_chair_routing(message, active_advisors, user_profile)
+
+    selected_advisors = {aid: active_advisors[aid] for aid in selected_ids if aid in active_advisors}
+
+    if not selected_advisors:
+        selected_advisors = dict(BASE_ADVISORS)
+        routing_rationale = "Consulting core advisors for a comprehensive perspective."
+
     responses = []
-    max_workers = len(active_advisors)
+    max_workers = max(1, len(selected_advisors))
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(get_advisor_response, advisor_id, message, session_id, user_profile): advisor_id
-            for advisor_id in active_advisors.keys()
+            for advisor_id in selected_advisors.keys()
         }
 
         for future in as_completed(futures):
@@ -544,7 +678,7 @@ def chat_all():
                 responses.append(result)
             except Exception as e:
                 advisor_id = futures[future]
-                advisor = active_advisors[advisor_id]
+                advisor = selected_advisors[advisor_id]
                 responses.append({
                     'advisor_id': advisor_id,
                     'response': f"Error: {str(e)}",
@@ -555,9 +689,19 @@ def chat_all():
     advisor_order = ['financial', 'operations', 'marketing', 'legal', 'risk', 'commodity_risk', 'livestock', 'sustainability', 'agronomist']
     responses.sort(key=lambda x: advisor_order.index(x['advisor_id']) if x['advisor_id'] in advisor_order else 99)
 
+    summary = synthesize_responses(message, responses, user_profile)
+
+    selected_titles = [active_advisors[aid]['title'] for aid in selected_ids if aid in active_advisors]
+
     return jsonify({
-        'mode': 'all',
-        'responses': responses
+        'mode': 'orchestrated',
+        'routing': {
+            'selected': selected_ids,
+            'selected_titles': selected_titles,
+            'rationale': routing_rationale
+        },
+        'responses': responses,
+        'summary': summary
     })
 
 

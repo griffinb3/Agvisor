@@ -1,13 +1,16 @@
 # Agvisor
 
 ## Overview
-An AI-powered board of advisors chatbot designed for all types of agricultural businesses. The app provides expert guidance through a customizable advisory board with 5 core advisors and 4 optional specialist positions, with personalized advice based on user's state, business type, description, and uploaded business records.
+An AI-powered board of advisors chatbot designed for all types of agricultural businesses. The app provides expert guidance through a customizable advisory board with 5 core advisors and 4 optional specialist positions, using **multi-agent orchestration** where a Board Chair agent routes questions to the most relevant advisors and synthesizes their responses.
 
 ## Current State
 - Fully functional Flask web application
+- **Multi-agent orchestration** with Board Chair coordinating advisors
 - AI chatbot integration using OpenAI via Replit AI Integrations
 - User profile system for personalized advice (state, business type, business description)
-- **All advisors respond to questions by default** (unless user asks for a specific advisor)
+- **Board Chair smart routing** — analyzes questions and selects 2-4 most relevant advisors
+- **Board Summary synthesis** — Chair produces actionable summary after advisor responses
+- **"Ask All Advisors" toggle** — user can override smart routing when desired
 - **Customizable advisory board** with base + optional advisors
 - 5 core board members (always active):
   1. **Finance Director** (Ag Economics & Investment)
@@ -22,6 +25,14 @@ An AI-powered board of advisors chatbot designed for all types of agricultural b
   4. **Agronomist** (Crop Science & Soil Health)
 - Business-type-specific suggestions for which optional advisors to add
 - **Development database** with fake ag business financial data (20 businesses across 4 performance categories)
+
+## Multi-Agent Orchestration Flow
+1. User submits a question
+2. **Board Chair** analyzes the question and user's business profile
+3. Chair selects 2-4 most relevant advisors (smart routing)
+4. Selected advisors respond in parallel with their specialized expertise
+5. **Board Chair synthesizes** all responses into a concise Board Summary with key recommendations, points of agreement, trade-offs, and next steps
+6. UI displays: routing info → advisor responses → board summary
 
 ## Database Schema (Development)
 PostgreSQL database with fake financial data for testing and development:
@@ -43,7 +54,7 @@ PostgreSQL database with fake financial data for testing and development:
 ## Project Architecture
 ```
 /
-├── main.py              # Flask application with API endpoints
+├── main.py              # Flask application with API endpoints + orchestration logic
 ├── templates/
 │   └── index.html       # Chat interface frontend with onboarding modal
 ├── static/
@@ -53,6 +64,10 @@ PostgreSQL database with fake financial data for testing and development:
 ```
 
 ## Key Features
+- **Multi-agent orchestration** with Board Chair coordinator
+- **Smart routing** — Board Chair selects most relevant advisors per question
+- **Board Summary** — synthesized recommendations after advisor responses
+- **Ask All Advisors** toggle — override smart routing for full board input
 - Conversational AI with agricultural expertise
 - **Customizable advisory board** — 5 core + up to 4 optional advisors
 - **Drag-and-drop advisor management** in sidebar
@@ -69,6 +84,7 @@ PostgreSQL database with fake financial data for testing and development:
 ## Tech Stack
 - **Backend**: Python, Flask
 - **AI**: OpenAI GPT via Replit AI Integrations (no API key required, charges billed to credits)
+- **Architecture**: Multi-agent orchestration (Board Chair + specialist advisors)
 - **Database**: PostgreSQL (development data)
 - **Frontend**: HTML, CSS, JavaScript
 
@@ -76,6 +92,7 @@ PostgreSQL database with fake financial data for testing and development:
 The app runs on port 5000 using the "Start application" workflow (`python main.py`).
 
 ## Recent Changes
+- February 24, 2026: Upgraded to multi-agent orchestration — Board Chair routes questions to relevant advisors, synthesizes Board Summary, added "Ask All Advisors" toggle
 - February 11, 2026: Created development database with 20 fake ag businesses, 5 years of financial statements, production records, and key ratios across 4 performance categories
 - February 11, 2026: Added drag-and-drop for optional advisors in sidebar — drag from "Available Specialists" to add, click X to remove
 - February 11, 2026: Added customizable advisory board with 5 base + 4 optional advisors and business-type suggestions
