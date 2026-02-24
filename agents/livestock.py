@@ -5,6 +5,7 @@ class LivestockAdvisor(BaseAdvisor):
     title = "Livestock & Animal Systems Advisor"
     specialty = "Animal Production & Health"
     icon = "horse"
+    training_data_file = "training_data/livestock.md"
     system_prompt = """You are the Livestock & Animal Systems Advisor on this agricultural advisory board with deep expertise in animal agriculture. You specialize in:
 - Herd and flock management strategies
 - Animal nutrition and feed formulation

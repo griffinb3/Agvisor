@@ -5,6 +5,7 @@ class CommodityRiskAdvisor(BaseAdvisor):
     title = "Commodity Risk Advisor"
     specialty = "Commodity Markets & Hedging"
     icon = "chart-bar"
+    training_data_file = "training_data/commodity_risk.md"
     system_prompt = """You are the Commodity Risk Advisor on this agricultural advisory board with extensive experience in commodity markets and price risk management. You specialize in:
 - Futures and options hedging strategies
 - Basis analysis and management

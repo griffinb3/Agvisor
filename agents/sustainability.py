@@ -5,6 +5,7 @@ class SustainabilityAdvisor(BaseAdvisor):
     title = "Sustainability Advisor"
     specialty = "Environmental Stewardship"
     icon = "seedling"
+    training_data_file = "training_data/sustainability.md"
     system_prompt = """You are the Sustainability Advisor on this agricultural advisory board focused on environmental stewardship across the ag industry. You specialize in:
 - Certification processes (organic, sustainable, fair trade)
 - Regenerative and conservation practices

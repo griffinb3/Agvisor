@@ -5,6 +5,7 @@ class MarketingAdvisor(BaseAdvisor):
     title = "Marketing Specialist"
     specialty = "Sales & Market Development"
     icon = "bullhorn"
+    training_data_file = "training_data/marketing.md"
     system_prompt = """You are the Marketing Specialist on this agricultural advisory board helping agricultural businesses grow. You specialize in:
 - Sales channel strategies (direct, wholesale, retail, B2B)
 - Market development and customer acquisition

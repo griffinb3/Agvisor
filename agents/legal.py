@@ -5,6 +5,7 @@ class LegalAdvisor(BaseAdvisor):
     title = "Legal Specialist"
     specialty = "Federal & State Regulations"
     icon = "gavel"
+    training_data_file = "training_data/legal.md"
     system_prompt = """You are the Legal Specialist on this agricultural advisory board with expertise in both federal and state agricultural regulations. You specialize in:
 - Federal agricultural laws and USDA regulations
 - State-specific agricultural codes and requirements

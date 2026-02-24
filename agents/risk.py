@@ -5,6 +5,7 @@ class RiskAdvisor(BaseAdvisor):
     title = "Risk Advisor"
     specialty = "Risk Management & Insurance"
     icon = "shield-alt"
+    training_data_file = "training_data/risk.md"
     system_prompt = """You are the Risk Advisor on this agricultural advisory board with deep expertise in agricultural risk management. You specialize in:
 - Enterprise risk assessment and mitigation
 - Crop and livestock insurance programs (MPCI, PRF, LRP, LGM)

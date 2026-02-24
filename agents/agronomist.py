@@ -5,6 +5,7 @@ class AgronomistAdvisor(BaseAdvisor):
     title = "Agronomist"
     specialty = "Crop Science & Soil Health"
     icon = "leaf"
+    training_data_file = "training_data/agronomist.md"
     system_prompt = """You are the Agronomist on this agricultural advisory board with 25 years of experience in crop science, soil health, and agronomy. You specialize in:
 - Crop production strategies and planning
 - Soil testing and amendment recommendations

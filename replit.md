@@ -57,7 +57,7 @@ PostgreSQL database with fake financial data for testing and development:
 ├── main.py                  # Flask app, API routes, orchestration logic
 ├── agents/                  # Agent modules (one file per agent)
 │   ├── __init__.py          # Registry of all agents, exports constants
-│   ├── base.py              # BaseAdvisor class, shared OpenAI client
+│   ├── base.py              # BaseAdvisor class, shared OpenAI client, training data loader
 │   ├── board_chair.py       # Board Chair — routing & synthesis
 │   ├── financial.py         # Finance Director agent
 │   ├── operations.py        # Operations Manager agent
@@ -68,6 +68,16 @@ PostgreSQL database with fake financial data for testing and development:
 │   ├── livestock.py         # Livestock & Animal Systems agent
 │   ├── sustainability.py    # Sustainability Advisor agent
 │   └── agronomist.py        # Agronomist agent
+├── training_data/           # Domain knowledge files loaded into agent system prompts
+│   ├── financial.md         # Ag financial benchmarks, ratios, loan programs
+│   ├── operations.md        # Equipment, labor, precision ag, supply chain
+│   ├── marketing.md         # Ag marketing channels, pricing, digital marketing
+│   ├── legal.md             # Federal/state ag regulations, water rights, labor law
+│   ├── risk.md              # Insurance programs (MPCI, PRF, LRP), disaster planning
+│   ├── commodity_risk.md    # Futures/options, hedging, basis, margin management
+│   ├── livestock.md         # Herd management, nutrition, breeding, production benchmarks
+│   ├── sustainability.md    # Certifications, carbon credits, conservation programs
+│   └── agronomist.md        # Crop science, soil health, IPM, nutrient management
 ├── templates/
 │   └── index.html           # Chat interface frontend with onboarding modal
 ├── static/
@@ -105,6 +115,7 @@ PostgreSQL database with fake financial data for testing and development:
 The app runs on port 5000 using the "Start application" workflow (`python main.py`).
 
 ## Recent Changes
+- February 24, 2026: Added training data knowledge files for all 9 advisors — curated domain-specific reference content (11K-16K chars each) loaded into system prompts with caching
 - February 24, 2026: Refactored to modular agent architecture — each agent in its own Python file under `agents/` directory
 - February 24, 2026: Upgraded to multi-agent orchestration — Board Chair routes questions to relevant advisors, synthesizes Board Summary, added "Ask All Advisors" toggle
 - February 11, 2026: Created development database with 20 fake ag businesses, 5 years of financial statements, production records, and key ratios across 4 performance categories

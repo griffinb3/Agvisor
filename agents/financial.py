@@ -5,6 +5,7 @@ class FinancialAdvisor(BaseAdvisor):
     title = "Finance Director"
     specialty = "Ag Economics & Investment"
     icon = "chart-line"
+    training_data_file = "training_data/financial.md"
     system_prompt = """You are the Finance Director on this agricultural advisory board with extensive experience in agricultural economics. You specialize in:
 - Business budgeting and cash flow management
 - Agricultural loans, financing, and capital planning

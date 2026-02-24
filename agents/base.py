@@ -2,6 +2,7 @@ import os
 from openai import OpenAI
 
 _client = None
+_training_data_cache = {}
 
 
 def get_openai_client():
@@ -14,11 +15,27 @@ def get_openai_client():
     return _client
 
 
+def load_training_data(file_path):
+    if file_path in _training_data_cache:
+        return _training_data_cache[file_path]
+
+    try:
+        full_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), file_path)
+        with open(full_path, 'r') as f:
+            content = f.read()
+        _training_data_cache[file_path] = content
+        return content
+    except (FileNotFoundError, IOError):
+        _training_data_cache[file_path] = None
+        return None
+
+
 class BaseAdvisor:
     title = "Advisor"
     specialty = "General"
     icon = "user"
     system_prompt = "You are an advisor."
+    training_data_file = None
 
     @classmethod
     def info(cls):
@@ -31,6 +48,11 @@ class BaseAdvisor:
     @classmethod
     def build_system_prompt(cls, user_profile=None):
         base = cls.system_prompt
+
+        if cls.training_data_file:
+            training_data = load_training_data(cls.training_data_file)
+            if training_data:
+                base += f"\n\nREFERENCE KNOWLEDGE:\nUse the following domain knowledge to inform your responses. Reference specific data points, benchmarks, and programs when relevant to the user's question.\n\n{training_data}"
 
         if user_profile:
             state = user_profile.get('state', '')
