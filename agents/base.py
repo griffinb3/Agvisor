@@ -85,6 +85,8 @@ class BaseAdvisor:
 
             base += context
 
+        base += "\n\nRESPONSE FORMAT: Keep your response concise. Write ONE short paragraph of analysis or advice, then list your TWO most important suggestions as numbered items. Do not exceed this format."
+
         return base
 
     @classmethod
@@ -108,7 +110,7 @@ class BaseAdvisor:
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
-                max_completion_tokens=1024
+                max_completion_tokens=512
             )
 
             assistant_message = response.choices[0].message.content
