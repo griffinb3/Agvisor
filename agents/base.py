@@ -81,6 +81,15 @@ class BaseAdvisor:
                     context += f"  Row {i+1}: {row_str}\n"
                 context += "\nUse this business data to provide specific, data-driven advice. Reference their actual numbers when relevant."
 
+            if state or business_type:
+                try:
+                    from data.query import get_advisor_context
+                    local_data = get_advisor_context(state, business_type)
+                    if local_data:
+                        context += f"\n\nSTATE & INDUSTRY DATA (from database — use these real data points in your advice):\n{local_data}"
+                except Exception:
+                    pass
+
             context += "\nTailor all your advice specifically to their location, business type, and operations. Reference relevant state-specific regulations, market conditions, and industry trends when applicable."
 
             base += context

@@ -395,4 +395,9 @@ def get_suggestions(business_type):
 
 
 if __name__ == '__main__':
+    try:
+        from seed_state_data import seed_all
+        seed_all()
+    except Exception as e:
+        print(f"Note: Could not initialize state data: {e}")
     app.run(host='0.0.0.0', port=5000, debug=True)
