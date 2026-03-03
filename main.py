@@ -116,25 +116,56 @@ def get_active_advisors(session_id):
 def detect_specific_advisor(message, active_advisors):
     message_lower = message.lower()
 
-    title_keywords = {
-        'financial': ['finance director', 'finance'],
-        'operations': ['operations manager', 'operations'],
-        'marketing': ['marketing specialist', 'marketing'],
-        'legal': ['legal specialist', 'legal', 'lawyer', 'attorney'],
-        'risk': ['risk advisor', 'risk management'],
-        'commodity_risk': ['commodity risk', 'commodity advisor', 'hedging', 'futures'],
-        'livestock': ['livestock advisor', 'livestock', 'animal systems', 'animal advisor', 'herd'],
-        'sustainability': ['sustainability advisor', 'sustainability'],
-        'agronomist': ['agronomist', 'agronomy']
+    explicit_titles = {
+        'financial': ['finance director', 'financial advisor', 'finance advisor'],
+        'operations': ['operations manager', 'operations advisor'],
+        'marketing': ['marketing specialist', 'marketing advisor'],
+        'legal': ['legal specialist', 'legal advisor'],
+        'risk': ['risk advisor', 'risk manager'],
+        'commodity_risk': ['commodity risk advisor', 'commodity advisor', 'commodity risk specialist'],
+        'livestock': ['livestock advisor', 'livestock specialist', 'animal systems advisor'],
+        'sustainability': ['sustainability advisor', 'sustainability specialist'],
+        'agronomist': ['agronomist advisor', 'crop advisor', 'crop specialist']
     }
 
-    for advisor_id, keywords in title_keywords.items():
+    for advisor_id, titles in explicit_titles.items():
         if advisor_id not in active_advisors:
             continue
-        for keyword in keywords:
-            pattern = rf'\b{re.escape(keyword)}\b'
-            if re.search(pattern, message_lower):
-                if any(phrase in message_lower for phrase in ['ask the', 'talk to', 'speak to', 'from the', 'hey ', 'question for']):
+        for title in titles:
+            if title in message_lower:
+                return advisor_id
+
+    directing_phrases = [
+        'ask the', 'talk to', 'speak to', 'speak with',
+        'from the', 'hey ', 'question for', 'advice from',
+        'what does the', 'what would the', 'what does our',
+        'what would our', 'can the', 'only the', 'just the',
+        'i want the', "i'd like the", 'i need the',
+        'let me ask', 'consult the', 'check with the',
+        'directed at', 'only ask',
+    ]
+
+    has_directing_phrase = any(phrase in message_lower for phrase in directing_phrases)
+
+    if has_directing_phrase:
+        single_word_map = {
+            'financial': ['finance', 'financial'],
+            'operations': ['operations'],
+            'marketing': ['marketing'],
+            'legal': ['legal', 'lawyer', 'attorney'],
+            'risk': ['risk'],
+            'sustainability': ['sustainability'],
+            'agronomist': ['agronomist', 'agronomy'],
+            'livestock': ['livestock'],
+            'commodity_risk': ['commodity risk'],
+        }
+
+        for advisor_id, keywords in single_word_map.items():
+            if advisor_id not in active_advisors:
+                continue
+            for keyword in keywords:
+                pattern = rf'\b{re.escape(keyword)}\b'
+                if re.search(pattern, message_lower):
                     return advisor_id
 
     return None
