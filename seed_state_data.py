@@ -1204,6 +1204,50 @@ def seed_state_commodities(conn):
     conn.commit()
 
 
+def create_action_plans(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS action_plans (
+                id SERIAL PRIMARY KEY,
+                session_id VARCHAR NOT NULL,
+                title VARCHAR NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                status VARCHAR NOT NULL DEFAULT 'active'
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS action_items (
+                id SERIAL PRIMARY KEY,
+                plan_id INTEGER NOT NULL REFERENCES action_plans(id) ON DELETE CASCADE,
+                description TEXT NOT NULL,
+                advisor_source VARCHAR,
+                priority VARCHAR NOT NULL DEFAULT 'medium',
+                status VARCHAR NOT NULL DEFAULT 'pending',
+                due_date DATE,
+                notes TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+        """)
+    conn.commit()
+
+
+def create_rag_documents(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS rag_documents (
+                id SERIAL PRIMARY KEY,
+                source VARCHAR NOT NULL,
+                category VARCHAR NOT NULL,
+                title VARCHAR NOT NULL,
+                chunk_text TEXT NOT NULL,
+                embedding TEXT,
+                state_relevance VARCHAR,
+                business_type_relevance VARCHAR
+            );
+        """)
+    conn.commit()
+
+
 def seed_all():
     conn = get_connection()
     try:
@@ -1225,6 +1269,10 @@ def seed_all():
         create_state_commodities(conn)
         seed_state_commodities(conn)
         print("State commodities seeded successfully.")
+        create_action_plans(conn)
+        print("Action plans tables created successfully.")
+        create_rag_documents(conn)
+        print("RAG documents table created successfully.")
     finally:
         conn.close()
 

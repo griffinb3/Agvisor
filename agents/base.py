@@ -1,5 +1,9 @@
 import os
+import logging
+from datetime import date
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 _client = None
 _training_data_cache = {}
@@ -81,6 +85,10 @@ class BaseAdvisor:
                     context += f"  Row {i+1}: {row_str}\n"
                 context += "\nUse this business data to provide specific, data-driven advice. Reference their actual numbers when relevant."
 
+            financial_analysis = user_profile.get('financial_analysis')
+            if financial_analysis:
+                context += f"\n\nCOMPUTED FINANCIAL ANALYSIS (calculated from uploaded records):\n{financial_analysis}"
+
             if state or business_type:
                 try:
                     from data.query import get_advisor_context
@@ -91,6 +99,37 @@ class BaseAdvisor:
                     pass
 
             context += "\nTailor all your advice specifically to their location, business type, and operations. Reference relevant state-specific regulations, market conditions, and industry trends when applicable."
+
+            try:
+                from data.ag_calendar import get_seasonal_context
+                growing_season_start = None
+                if state:
+                    try:
+                        from data.query import _query
+                        rows = _query("SELECT growing_season_start FROM state_ag_profiles WHERE state_name = %s", (state,))
+                        if rows:
+                            growing_season_start = rows[0].get('growing_season_start')
+                    except Exception as e:
+                        logger.debug(f"Could not fetch growing season: {e}")
+                seasonal_context = get_seasonal_context(
+                    state_name=state or None,
+                    business_type=business_type or None,
+                    current_date=date.today(),
+                    growing_season_start=growing_season_start,
+                )
+                if seasonal_context:
+                    context += f"\n\nCURRENT SEASONAL CONTEXT & UPCOMING DEADLINES:\n{seasonal_context}"
+            except Exception as e:
+                logger.warning(f"Failed to load seasonal context: {e}")
+
+            if state or business_type:
+                try:
+                    from data.commodity_prices import get_relevant_prices
+                    price_data = get_relevant_prices(state or None, business_type or None)
+                    if price_data and "unavailable" not in price_data.lower():
+                        context += f"\n\nCURRENT COMMODITY PRICES (live market data):\n{price_data}"
+                except Exception as e:
+                    logger.warning(f"Failed to load commodity prices: {e}")
 
             base += context
 
@@ -108,6 +147,18 @@ class BaseAdvisor:
             conversation_histories[history_key] = []
 
         system_prompt = cls.build_system_prompt(user_profile)
+
+        rag_context = None
+        try:
+            from data.rag import get_relevant_context
+            state = user_profile.get('state') if user_profile else None
+            btype = user_profile.get('business_type') if user_profile else None
+            rag_context = get_relevant_context(message, top_k=3, state_name=state, business_type=btype)
+        except Exception as e:
+            logger.warning(f"Failed to retrieve RAG context: {e}")
+
+        if rag_context:
+            system_prompt += f"\n\nRELEVANT REFERENCE DOCUMENTS (from USDA publications and extension guides — cite specific details when applicable):\n{rag_context}"
 
         messages = [
             {"role": "system", "content": system_prompt}

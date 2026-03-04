@@ -1,9 +1,14 @@
 import re
 import csv
 import io
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, jsonify, session
 import os
+import psycopg2
+import psycopg2.extras
+
+from data.financial_analysis import analyze_records
 
 from agents import (
     ADVISOR_CLASSES, BASE_ADVISORS, OPTIONAL_ADVISORS, ALL_ADVISORS,
@@ -248,6 +253,10 @@ def upload_records():
             'row_count': len(rows)
         }
 
+        financial_analysis = analyze_records(headers, data_preview)
+        if financial_analysis:
+            user_profiles[session_id]['financial_analysis'] = financial_analysis
+
         return jsonify({
             'status': 'uploaded',
             'summary': summary,
@@ -394,10 +403,203 @@ def get_suggestions(business_type):
     return jsonify(suggestion)
 
 
+def get_db_connection():
+    return psycopg2.connect(os.environ["DATABASE_URL"])
+
+
+def extract_action_items(text, advisor_source=None):
+    items = []
+    lines = text.strip().split('\n')
+    for line in lines:
+        stripped = line.strip()
+        match = re.match(r'^(?:\d+[\.\)]\s*|[-*•]\s+)(.*)', stripped)
+        if match:
+            desc = match.group(1).strip()
+            if len(desc) > 10:
+                priority = 'medium'
+                lower = desc.lower()
+                if any(w in lower for w in ['immediate', 'urgent', 'critical', 'asap', 'right away']):
+                    priority = 'high'
+                elif any(w in lower for w in ['consider', 'optional', 'long-term', 'eventually', 'when possible']):
+                    priority = 'low'
+                items.append({
+                    'description': desc,
+                    'advisor_source': advisor_source,
+                    'priority': priority
+                })
+    return items
+
+
+def _get_session_id():
+    if 'session_id' not in session:
+        session['session_id'] = os.urandom(16).hex()
+    return session['session_id']
+
+
+@app.route('/api/plans', methods=['POST'])
+def create_plan():
+    data = request.json
+    session_id = _get_session_id()
+    title = data.get('title', 'Action Plan')
+    items = data.get('items', [])
+    advisor_response = data.get('advisor_response', '')
+    advisor_source = data.get('advisor_source', None)
+
+    if not items and advisor_response:
+        items = extract_action_items(advisor_response, advisor_source)
+
+    if not items:
+        return jsonify({'error': 'No action items could be extracted or provided'}), 400
+
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO action_plans (session_id, title) VALUES (%s, %s) RETURNING id, created_at",
+                (session_id, title)
+            )
+            plan_row = cur.fetchone()
+            plan_id = plan_row[0]
+            plan_created_at = plan_row[1]
+
+            created_items = []
+            for item in items:
+                cur.execute(
+                    """INSERT INTO action_items (plan_id, description, advisor_source, priority, due_date, notes)
+                       VALUES (%s, %s, %s, %s, %s, %s) RETURNING id, created_at""",
+                    (plan_id, item.get('description', ''),
+                     item.get('advisor_source', advisor_source),
+                     item.get('priority', 'medium'),
+                     item.get('due_date', None),
+                     item.get('notes', None))
+                )
+                item_row = cur.fetchone()
+                created_items.append({
+                    'id': item_row[0],
+                    'description': item.get('description', ''),
+                    'advisor_source': item.get('advisor_source', advisor_source),
+                    'priority': item.get('priority', 'medium'),
+                    'status': 'pending',
+                    'due_date': item.get('due_date', None),
+                    'notes': item.get('notes', None),
+                    'created_at': item_row[1].isoformat()
+                })
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'id': plan_id,
+            'session_id': session_id,
+            'title': title,
+            'status': 'active',
+            'created_at': plan_created_at.isoformat(),
+            'items': created_items
+        }), 201
+    except Exception:
+        return jsonify({'error': 'Failed to create plan'}), 500
+
+
+@app.route('/api/plans', methods=['GET'])
+def get_plans():
+    session_id = _get_session_id()
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT * FROM action_plans WHERE session_id = %s AND status != 'archived' ORDER BY created_at DESC",
+                (session_id,)
+            )
+            plans = cur.fetchall()
+
+            result = []
+            for plan in plans:
+                cur.execute(
+                    "SELECT * FROM action_items WHERE plan_id = %s ORDER BY created_at ASC",
+                    (plan['id'],)
+                )
+                items = cur.fetchall()
+                plan_dict = dict(plan)
+                plan_dict['created_at'] = plan_dict['created_at'].isoformat()
+                plan_dict['items'] = []
+                for item in items:
+                    item_dict = dict(item)
+                    item_dict['created_at'] = item_dict['created_at'].isoformat()
+                    if item_dict.get('due_date'):
+                        item_dict['due_date'] = item_dict['due_date'].isoformat()
+                    plan_dict['items'].append(item_dict)
+                result.append(plan_dict)
+        conn.close()
+        return jsonify(result)
+    except Exception:
+        return jsonify({'error': 'Failed to fetch plans'}), 500
+
+
+@app.route('/api/plans/<int:plan_id>/items/<int:item_id>', methods=['PUT'])
+def update_plan_item(plan_id, item_id):
+    session_id = _get_session_id()
+    data = request.json
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT ap.id FROM action_plans ap JOIN action_items ai ON ai.plan_id = ap.id WHERE ap.id = %s AND ai.id = %s AND ap.session_id = %s",
+                (plan_id, item_id, session_id)
+            )
+            if not cur.fetchone():
+                conn.close()
+                return jsonify({'error': 'Item not found'}), 404
+
+            updates = []
+            values = []
+            allowed_fields = ['status', 'priority', 'notes', 'due_date', 'description']
+            for field in allowed_fields:
+                if field in data:
+                    updates.append(f"{field} = %s")
+                    values.append(data[field])
+
+            if not updates:
+                conn.close()
+                return jsonify({'error': 'No fields to update'}), 400
+
+            values.extend([item_id, plan_id])
+            cur.execute(
+                f"UPDATE action_items SET {', '.join(updates)} WHERE id = %s AND plan_id = %s",
+                values
+            )
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'updated'})
+    except Exception:
+        return jsonify({'error': 'Failed to update item'}), 500
+
+
+@app.route('/api/plans/<int:plan_id>', methods=['DELETE'])
+def delete_plan(plan_id):
+    session_id = _get_session_id()
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM action_plans WHERE id = %s AND session_id = %s", (plan_id, session_id))
+            if not cur.fetchone():
+                conn.close()
+                return jsonify({'error': 'Plan not found'}), 404
+            cur.execute("UPDATE action_plans SET status = 'archived' WHERE id = %s", (plan_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'archived'})
+    except Exception:
+        return jsonify({'error': 'Failed to delete plan'}), 500
+
+
 if __name__ == '__main__':
     try:
         from seed_state_data import seed_all
         seed_all()
     except Exception as e:
         print(f"Note: Could not initialize state data: {e}")
+    try:
+        from data.rag import seed_rag_documents
+        seed_rag_documents()
+    except Exception as e:
+        print(f"Note: Could not seed RAG documents: {e}")
     app.run(host='0.0.0.0', port=5000, debug=True)

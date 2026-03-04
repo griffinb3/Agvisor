@@ -131,6 +131,11 @@
                 <h1>Agvisor</h1>
             </div>
             <div class="header-right">
+                <button class="action-plans-btn" id="actionPlansBtn" title="Action Plans">
+                    <i class="fas fa-tasks"></i>
+                    <span>Action Plans</span>
+                    <span class="plans-badge" id="plansBadge" style="display:none;">0</span>
+                </button>
                 <button class="profile-btn" id="editProfileBtn" title="Edit Profile">
                     <i class="fas fa-user-cog"></i>
                     <span id="profileSummary">Set up profile</span>
@@ -206,12 +211,30 @@
         </div>
     </div>
 
+    <div class="action-plans-overlay" id="actionPlansOverlay"></div>
+    <div class="action-plans-panel" id="actionPlansPanel">
+        <div class="plans-panel-header">
+            <h2><i class="fas fa-tasks"></i> Action Plans</h2>
+            <button class="plans-close-btn" id="closePlansBtn"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="plans-panel-body" id="plansPanelBody">
+            <div class="plans-empty" id="plansEmpty">
+                <i class="fas fa-clipboard-list"></i>
+                <p>No action plans yet</p>
+                <span>Save advisor recommendations as action plans to track your progress</span>
+            </div>
+            <div class="plans-list" id="plansList"></div>
+        </div>
+    </div>
+
     <script>
-        const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+        const sessionId = localStorage.getItem('agvisorSessionId') || ('session_' + Math.random().toString(36).substr(2, 9));
+        localStorage.setItem('agvisorSessionId', sessionId);
         let currentAdvisor = 'financial';
         let isLoading = false;
         let userProfile = null;
         let askAllMode = false;
+        let actionPlans = [];
 
         const baseAdvisors = {
             {% for id, advisor in base_advisors.items() %}
@@ -798,13 +821,22 @@
             if (data.summary) {
                 const summaryDiv = document.createElement('div');
                 summaryDiv.className = 'board-summary';
+                const summaryId = 'summary_' + Date.now();
                 summaryDiv.innerHTML = `
                     <div class="board-summary-header">
                         <i class="fas fa-clipboard-check"></i>
                         <span>Board Summary</span>
                     </div>
                     <div class="board-summary-content">${formatMessage(data.summary)}</div>
+                    <div class="board-summary-actions">
+                        <button class="save-plan-btn" data-summary-id="${summaryId}" onclick="saveAsPlan(this)">
+                            <i class="fas fa-save"></i> Save as Action Plan
+                        </button>
+                    </div>
                 `;
+                summaryDiv.dataset.summaryText = data.summary;
+                summaryDiv.dataset.responses = JSON.stringify(data.responses);
+                summaryDiv.id = summaryId;
                 containerDiv.appendChild(summaryDiv);
             }
 
@@ -857,6 +889,270 @@
             formatted = formatted.replace(/\n/g, '<br>');
             return formatted;
         }
+
+        const actionPlansBtn = document.getElementById('actionPlansBtn');
+        const actionPlansPanel = document.getElementById('actionPlansPanel');
+        const actionPlansOverlay = document.getElementById('actionPlansOverlay');
+        const closePlansBtn = document.getElementById('closePlansBtn');
+        const plansBadge = document.getElementById('plansBadge');
+        const plansList = document.getElementById('plansList');
+        const plansEmpty = document.getElementById('plansEmpty');
+
+        function openPlansPanel() {
+            actionPlansPanel.classList.add('open');
+            actionPlansOverlay.classList.add('open');
+            loadPlans();
+        }
+
+        function closePlansPanel() {
+            actionPlansPanel.classList.remove('open');
+            actionPlansOverlay.classList.remove('open');
+        }
+
+        actionPlansBtn.addEventListener('click', openPlansPanel);
+        closePlansBtn.addEventListener('click', closePlansPanel);
+        actionPlansOverlay.addEventListener('click', closePlansPanel);
+
+        async function loadPlans() {
+            try {
+                const response = await fetch('/api/plans');
+                actionPlans = await response.json();
+                if (Array.isArray(actionPlans)) {
+                    renderPlans();
+                    updatePlansBadge();
+                }
+            } catch (err) {
+                console.error('Error loading plans:', err);
+            }
+        }
+
+        function updatePlansBadge() {
+            const activePlans = actionPlans.filter(p => p.status === 'active');
+            if (activePlans.length > 0) {
+                plansBadge.textContent = activePlans.length;
+                plansBadge.style.display = 'inline-flex';
+            } else {
+                plansBadge.style.display = 'none';
+            }
+        }
+
+        function renderPlans() {
+            const activePlans = actionPlans.filter(p => p.status !== 'archived');
+            if (activePlans.length === 0) {
+                plansEmpty.style.display = 'flex';
+                plansList.innerHTML = '';
+                return;
+            }
+            plansEmpty.style.display = 'none';
+            plansList.innerHTML = '';
+
+            activePlans.forEach(plan => {
+                const planEl = document.createElement('div');
+                planEl.className = 'plan-card';
+                planEl.dataset.planId = plan.id;
+
+                const completedCount = (plan.items || []).filter(i => i.status === 'completed').length;
+                const totalCount = (plan.items || []).length;
+                const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+                const createdDate = new Date(plan.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+                let itemsHtml = '';
+                (plan.items || []).forEach(item => {
+                    const isCompleted = item.status === 'completed';
+                    const isInProgress = item.status === 'in_progress';
+                    const priorityClass = `priority-${item.priority || 'medium'}`;
+                    const advisorLabel = item.advisor_source ? getAdvisorTitle(item.advisor_source) : '';
+
+                    itemsHtml += `
+                        <div class="plan-item ${isCompleted ? 'item-completed' : ''}" data-item-id="${item.id}">
+                            <div class="plan-item-main">
+                                <button class="plan-item-check ${isCompleted ? 'checked' : ''}" 
+                                    onclick="toggleItemStatus(${plan.id}, ${item.id}, '${item.status}')">
+                                    <i class="fas ${isCompleted ? 'fa-check-circle' : 'fa-circle'}"></i>
+                                </button>
+                                <div class="plan-item-content">
+                                    <div class="plan-item-desc">${escapeHtml(item.description)}</div>
+                                    <div class="plan-item-meta">
+                                        ${advisorLabel ? `<span class="plan-item-advisor"><i class="fas fa-user-tie"></i> ${escapeHtml(advisorLabel)}</span>` : ''}
+                                        <span class="plan-item-priority ${priorityClass}">${item.priority || 'medium'}</span>
+                                        <button class="plan-item-status-btn ${isInProgress ? 'active' : ''}" 
+                                            onclick="cycleItemStatus(${plan.id}, ${item.id}, '${item.status}')">
+                                            ${getStatusLabel(item.status)}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="plan-item-notes-section">
+                                <textarea class="plan-item-notes" placeholder="Add notes..." 
+                                    onchange="updateItemNotes(${plan.id}, ${item.id}, this.value)">${item.notes || ''}</textarea>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                planEl.innerHTML = `
+                    <div class="plan-card-header">
+                        <div class="plan-card-title">
+                            <h3>${escapeHtml(plan.title)}</h3>
+                            <span class="plan-card-date">${createdDate}</span>
+                        </div>
+                        <button class="plan-delete-btn" onclick="deletePlan(${plan.id})" title="Archive plan">
+                            <i class="fas fa-archive"></i>
+                        </button>
+                    </div>
+                    <div class="plan-progress">
+                        <div class="plan-progress-bar">
+                            <div class="plan-progress-fill" style="width: ${progressPct}%"></div>
+                        </div>
+                        <span class="plan-progress-text">${completedCount}/${totalCount} completed</span>
+                    </div>
+                    <div class="plan-items">${itemsHtml}</div>
+                `;
+                plansList.appendChild(planEl);
+            });
+        }
+
+        function getAdvisorTitle(advisorId) {
+            const all = {...baseAdvisors, ...optionalAdvisors};
+            return all[advisorId] ? all[advisorId].title : advisorId;
+        }
+
+        function getStatusLabel(status) {
+            switch(status) {
+                case 'pending': return '<i class="fas fa-clock"></i> Pending';
+                case 'in_progress': return '<i class="fas fa-spinner"></i> In Progress';
+                case 'completed': return '<i class="fas fa-check"></i> Completed';
+                default: return '<i class="fas fa-clock"></i> Pending';
+            }
+        }
+
+        function getNextStatus(current) {
+            switch(current) {
+                case 'pending': return 'in_progress';
+                case 'in_progress': return 'completed';
+                case 'completed': return 'pending';
+                default: return 'in_progress';
+            }
+        }
+
+        async function toggleItemStatus(planId, itemId, currentStatus) {
+            const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+            await updateItem(planId, itemId, { status: newStatus });
+        }
+
+        async function cycleItemStatus(planId, itemId, currentStatus) {
+            const newStatus = getNextStatus(currentStatus);
+            await updateItem(planId, itemId, { status: newStatus });
+        }
+
+        async function updateItemNotes(planId, itemId, notes) {
+            await updateItem(planId, itemId, { notes: notes });
+        }
+
+        async function updateItem(planId, itemId, data) {
+            try {
+                await fetch(`/api/plans/${planId}/items/${itemId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                await loadPlans();
+            } catch (err) {
+                console.error('Error updating item:', err);
+            }
+        }
+
+        async function deletePlan(planId) {
+            if (!confirm('Archive this action plan?')) return;
+            try {
+                await fetch(`/api/plans/${planId}`, { method: 'DELETE' });
+                await loadPlans();
+            } catch (err) {
+                console.error('Error deleting plan:', err);
+            }
+        }
+
+        async function saveAsPlan(btn) {
+            const summaryId = btn.dataset.summaryId;
+            const summaryEl = document.getElementById(summaryId);
+            if (!summaryEl) return;
+
+            const summaryText = summaryEl.dataset.summaryText || '';
+            let responses = [];
+            try { responses = JSON.parse(summaryEl.dataset.responses || '[]'); } catch(e) {}
+
+            const title = prompt('Name this action plan:', 'Action Plan - ' + new Date().toLocaleDateString());
+            if (!title) return;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+            let allItems = [];
+            responses.forEach(resp => {
+                const items = extractClientItems(resp.response, resp.advisor_id);
+                allItems = allItems.concat(items);
+            });
+
+            if (allItems.length === 0) {
+                const items = extractClientItems(summaryText, null);
+                allItems = items;
+            }
+
+            try {
+                const response = await fetch('/api/plans', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: title,
+                        items: allItems.length > 0 ? allItems : undefined,
+                        advisor_response: allItems.length === 0 ? summaryText : undefined
+                    })
+                });
+                const data = await response.json();
+                if (data.error) {
+                    alert('Could not save plan: ' + data.error);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-save"></i> Save as Action Plan';
+                    return;
+                }
+
+                btn.innerHTML = '<i class="fas fa-check"></i> Saved!';
+                btn.classList.add('saved');
+
+                await loadPlans();
+                setTimeout(() => openPlansPanel(), 500);
+            } catch (err) {
+                console.error('Error saving plan:', err);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save"></i> Save as Action Plan';
+            }
+        }
+
+        function extractClientItems(text, advisorSource) {
+            const items = [];
+            const lines = text.split('\n');
+            for (const line of lines) {
+                const stripped = line.trim();
+                const match = stripped.match(/^(?:\d+[.)]\s*|[-*•]\s+)(.*)/);
+                if (match) {
+                    const desc = match[1].trim();
+                    if (desc.length > 10) {
+                        let priority = 'medium';
+                        const lower = desc.toLowerCase();
+                        if (['immediate','urgent','critical','asap','right away'].some(w => lower.includes(w))) {
+                            priority = 'high';
+                        } else if (['consider','optional','long-term','eventually','when possible'].some(w => lower.includes(w))) {
+                            priority = 'low';
+                        }
+                        items.push({ description: desc, advisor_source: advisorSource, priority: priority });
+                    }
+                }
+            }
+            return items;
+        }
+
+        loadPlans();
     </script>
 </body>
 </html>
