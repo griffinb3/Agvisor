@@ -18,7 +18,7 @@ The Agvisor application is built as a Flask web application utilizing a multi-ag
 Each advisor's system prompt is dynamically enriched with a robust context pipeline including:
 - Curated domain knowledge from `training_data/*.md` files.
 - User profile data (business type, state, description).
-- Raw data preview and computed financial ratios/trends from uploaded CSV records via a `Financial Analysis Engine`.
+- Raw data preview and computed financial ratios/trends from uploaded records (CSV, Excel, PDF, Word, TXT, RTF) via a `Financial Analysis Engine` and multi-format file parser.
 - State-specific agricultural data (profiles, regulations, programs, commodities, extension services) from a PostgreSQL database.
 - Seasonal agricultural context and deadlines.
 - Live commodity prices with a 1-hour cache.
@@ -27,6 +27,7 @@ Each advisor's system prompt is dynamically enriched with a robust context pipel
 The UI/UX includes a responsive chat interface, an onboarding modal, and a panel for managing `Saved Action Plans`, which allows users to track recommendations. Advisors' responses are displayed concisely.
 
 Key architectural features include:
+- **Multi-Format File Upload**: Supports CSV, Excel (.xlsx), PDF, Word (.docx), plain text (.txt), and RTF files. Tabular formats run through the financial analysis pipeline; document formats have their text extracted and injected into advisor prompts.
 - **Financial Analysis Engine**: Automatically computes profitability, liquidity, solvency, efficiency ratios, and year-over-year trends from uploaded financial data.
 - **Seasonal Calendar Awareness**: Advisors consider current agricultural seasons, upcoming deadlines, and growing season adjustments.
 - **Saved Action Plans**: Users can save board summaries as trackable action plans with progress tracking, priorities, and notes.
@@ -38,3 +39,4 @@ Key architectural features include:
 - **AI**: OpenAI GPT (via Replit AI Integrations)
 - **Database**: PostgreSQL (for state/business reference data, action plans, RAG documents, and development financial data)
 - **Commodity Prices**: Yahoo Finance API (for live commodity prices)
+- **File Parsing**: openpyxl (Excel), PyPDF2 (PDF), python-docx (Word), striprtf (RTF)

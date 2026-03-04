@@ -7,5 +7,9 @@ requires-python = ">=3.11"
 dependencies = [
     "flask>=3.1.2",
     "openai>=2.16.0",
+    "openpyxl>=3.1.5",
     "psycopg2-binary>=2.9.0",
+    "pypdf2>=3.0.1",
+    "python-docx>=1.2.0",
+    "striprtf>=0.0.29",
 ]

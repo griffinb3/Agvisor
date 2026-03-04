@@ -85,6 +85,15 @@ class BaseAdvisor:
                     context += f"  Row {i+1}: {row_str}\n"
                 context += "\nUse this business data to provide specific, data-driven advice. Reference their actual numbers when relevant."
 
+            uploaded_doc = user_profile.get('uploaded_document')
+            if uploaded_doc:
+                doc_text = uploaded_doc.get('text', '')
+                doc_words = doc_text.split()
+                if len(doc_words) > 3000:
+                    doc_text = ' '.join(doc_words[:3000]) + '\n\n[Document truncated for context]'
+                context += f"\n\nUPLOADED BUSINESS DOCUMENT (provided by user — {uploaded_doc.get('summary', 'document')}):\n{doc_text}"
+                context += "\nUse the content of this document to provide specific, informed advice. Reference relevant details from the document when applicable."
+
             financial_analysis = user_profile.get('financial_analysis')
             if financial_analysis:
                 context += f"\n\nCOMPUTED FINANCIAL ANALYSIS (calculated from uploaded records):\n{financial_analysis}"

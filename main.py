@@ -17,6 +17,7 @@ from agents import (
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 
 US_STATES = [
     "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
@@ -228,40 +229,55 @@ def upload_records():
         return jsonify({'error': 'No file selected'}), 400
 
     try:
-        content = file.read().decode('utf-8')
-        reader = csv.DictReader(io.StringIO(content))
-        rows = list(reader)
-
-        if len(rows) > 100:
-            rows = rows[:100]
-
-        headers = reader.fieldnames or []
-
-        summary = f"Business records with {len(rows)} rows and columns: {', '.join(headers[:10])}"
-
-        data_preview = []
-        for row in rows[:20]:
-            data_preview.append(dict(row))
+        from data.file_parsers import parse_file
+        file_bytes = file.read()
+        result = parse_file(file_bytes, file.filename)
 
         if session_id not in user_profiles:
             user_profiles[session_id] = {}
 
-        user_profiles[session_id]['business_data'] = {
-            'summary': summary,
-            'headers': headers[:15],
-            'preview': data_preview,
-            'row_count': len(rows)
-        }
+        if result['type'] == 'tabular':
+            user_profiles[session_id]['business_data'] = {
+                'summary': result['summary'],
+                'headers': result['headers'],
+                'preview': result['preview'],
+                'row_count': result['row_count']
+            }
+            user_profiles[session_id].pop('uploaded_document', None)
 
-        financial_analysis = analyze_records(headers, data_preview)
-        if financial_analysis:
-            user_profiles[session_id]['financial_analysis'] = financial_analysis
+            financial_analysis = analyze_records(result['headers'], result['preview'])
+            if financial_analysis:
+                user_profiles[session_id]['financial_analysis'] = financial_analysis
 
-        return jsonify({
-            'status': 'uploaded',
-            'summary': summary,
-            'row_count': len(rows)
-        })
+            return jsonify({
+                'status': 'uploaded',
+                'type': 'tabular',
+                'summary': result['summary'],
+                'row_count': result['row_count']
+            })
+        else:
+            user_profiles[session_id]['uploaded_document'] = {
+                'format': result['format'],
+                'text': result['text'],
+                'summary': result['summary'],
+                'word_count': result.get('word_count', 0),
+                'page_count': result.get('page_count'),
+                'paragraph_count': result.get('paragraph_count'),
+                'line_count': result.get('line_count'),
+            }
+            user_profiles[session_id].pop('business_data', None)
+            user_profiles[session_id].pop('financial_analysis', None)
+
+            return jsonify({
+                'status': 'uploaded',
+                'type': 'document',
+                'summary': result['summary'],
+                'format': result['format'],
+                'word_count': result.get('word_count', 0),
+                'page_count': result.get('page_count'),
+            })
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         return jsonify({'error': f'Error processing file: {str(e)}'}), 400
 

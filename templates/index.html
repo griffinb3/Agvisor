@@ -105,10 +105,10 @@
                 </div>
                 
                 <div class="form-group">
-                    <label>Business Records (Optional)</label>
-                    <p class="form-hint">Upload a CSV or spreadsheet with your business financial or production data</p>
+                    <label>Business Records or Documents (Optional)</label>
+                    <p class="form-hint">Upload financial data (CSV, Excel) or business documents (PDF, Word, TXT, RTF)</p>
                     <div class="file-upload-wrapper">
-                        <input type="file" id="businessRecords" accept=".csv,.xlsx,.xls">
+                        <input type="file" id="businessRecords" accept=".csv,.xlsx,.pdf,.docx,.txt,.rtf">
                         <div class="file-upload-label" id="fileLabel">
                             <i class="fas fa-file-upload"></i>
                             <span>Choose a file or drag it here</span>
@@ -526,7 +526,12 @@
                     return false;
                 }
                 
-                fileStatus.textContent = `Uploaded: ${data.row_count} records processed`;
+                if (data.type === 'tabular') {
+                    fileStatus.textContent = `Uploaded: ${data.row_count} records processed`;
+                } else {
+                    let detail = data.summary || 'Document processed';
+                    fileStatus.textContent = `Uploaded: ${detail}`;
+                }
                 fileStatus.style.display = 'block';
                 return true;
             } catch (error) {
