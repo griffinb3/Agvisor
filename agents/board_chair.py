@@ -7,15 +7,15 @@ ROUTING_PROMPT = """You are the Board Chair of an agricultural advisory board. Y
 
 You must return valid JSON only — no other text.
 
-Given the user's question and their business profile, select 2-4 of the most relevant advisors from the active board to respond. Consider:
+Given the user's question and their business profile, select exactly 5 of the most relevant advisors from the active board to respond. If fewer than 5 are available, select all of them. Consider:
 1. Which advisors have direct expertise related to the question
 2. The user's business type and how it relates to each advisor's specialty
 3. Cross-functional implications (e.g., a land purchase question involves finance, legal, and possibly operations)
 
 Return a JSON object with this exact structure:
-{"selected": ["advisor_id_1", "advisor_id_2"], "rationale": "Brief explanation of why these advisors were selected"}
+{"selected": ["advisor_id_1", "advisor_id_2", "advisor_id_3", "advisor_id_4", "advisor_id_5"], "rationale": "Brief explanation of why these advisors were selected"}
 
-Only select from the active advisor IDs provided. Select 2-4 advisors unless the question truly requires more perspectives."""
+Only select from the active advisor IDs provided. Always select 5 advisors."""
 
 SYNTHESIS_PROMPT = """You are the Board Chair of an agricultural advisory board. Your role is to synthesize the responses from multiple advisors into a clear, actionable board summary.
 
@@ -59,7 +59,7 @@ class BoardChair:
 
 User's question: {message}
 
-Select 2-4 advisors and return JSON only."""
+Select 5 advisors (or all if fewer than 5 are available) and return JSON only."""
 
         try:
             response = client.chat.completions.create(
@@ -81,12 +81,12 @@ Select 2-4 advisors and return JSON only."""
             rationale = result.get("rationale", "")
 
             if len(selected) < 2:
-                selected = list(active_advisors.keys())[:4]
+                selected = list(active_advisors.keys())[:5]
                 rationale = "Routing to core advisors for broad coverage."
 
             return selected, rationale
         except Exception:
-            selected = list(active_advisors.keys())[:4]
+            selected = list(active_advisors.keys())[:5]
             return selected, "Consulting core advisors for a comprehensive perspective."
 
     @staticmethod

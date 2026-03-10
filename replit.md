@@ -13,7 +13,7 @@ Agvisor is an AI-powered chatbot designed to provide expert agricultural guidanc
 - The agent should limit advisor responses to one paragraph plus two key suggestions for conciseness.
 
 ## System Architecture
-The Agvisor application is built as a Flask web application utilizing a multi-agent orchestration pattern. A central `Board Chair` agent is responsible for smart routing user questions to 2-4 most relevant specialist advisors from a customizable board of 5 core and 4 optional members. After parallel processing, the `Board Chair` synthesizes these responses into a comprehensive `Board Summary`. Users can override smart routing via an "Ask All Advisors" toggle or directly address specific advisors.
+The Agvisor application is built as a Flask web application utilizing a multi-agent orchestration pattern. A central `Board Chair` agent is responsible for smart routing user questions to 5 most relevant specialist advisors from a customizable board of 5 core and 4 optional members. After parallel processing, the `Board Chair` synthesizes these responses into a comprehensive `Board Summary`. Users can override smart routing via an "Ask All Advisors" toggle or directly address specific advisors.
 
 Each advisor's system prompt is dynamically enriched with a robust context pipeline including:
 - Curated domain knowledge from `training_data/*.md` files.
