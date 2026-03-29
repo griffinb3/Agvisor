@@ -1188,6 +1188,81 @@ body {
     align-items: center;
     gap: 0.5rem;
     margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.chat-mode-toggle {
+    display: flex;
+    background: var(--bg-light);
+    border: 1.5px solid var(--border-color);
+    border-radius: 20px;
+    padding: 2px;
+    gap: 0;
+    flex-shrink: 0;
+}
+
+.mode-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.28rem 0.7rem;
+    background: transparent;
+    border: none;
+    border-radius: 18px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    font-family: inherit;
+}
+
+.mode-pill.active {
+    background: var(--primary-green);
+    color: white;
+}
+
+.mode-pill:hover:not(.active) {
+    color: var(--primary-green);
+}
+
+.mode-pill i {
+    font-size: 0.78rem;
+}
+
+.direct-advisor-selector select {
+    padding: 0.35rem 0.75rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: 20px;
+    background: white;
+    font-size: 0.8rem;
+    color: var(--text-dark);
+    cursor: pointer;
+    outline: none;
+    font-family: inherit;
+    transition: border-color 0.2s ease;
+}
+
+.direct-advisor-selector select:focus {
+    border-color: var(--primary-green);
+}
+
+.direct-mode-tag {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--primary-green);
+    background: rgba(45, 90, 39, 0.08);
+    border: 1px solid rgba(45, 90, 39, 0.18);
+    border-radius: 10px;
+    padding: 0.1rem 0.45rem;
+}
+
+.direct-mode-tag i {
+    font-size: 0.68rem;
 }
 
 .orchestration-badge {

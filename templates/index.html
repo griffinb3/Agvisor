@@ -177,9 +177,22 @@
                 <div class="chat-input-area">
                     <form id="chatForm">
                         <div class="input-controls">
+                            <div class="chat-mode-toggle">
+                                <button type="button" class="mode-pill active" id="boardModeBtn" title="Board Chair routes your question to the most relevant advisors">
+                                    <i class="fas fa-project-diagram"></i> Board
+                                </button>
+                                <button type="button" class="mode-pill" id="directModeBtn" title="Talk directly with one advisor of your choice">
+                                    <i class="fas fa-user"></i> Direct
+                                </button>
+                            </div>
                             <button type="button" class="ask-all-toggle" id="askAllToggle" title="Override smart routing and ask all advisors">
-                                <i class="fas fa-users"></i> Ask All Advisors
+                                <i class="fas fa-users"></i> Ask All
                             </button>
+                            <div class="direct-advisor-selector" id="directAdvisorSelector" style="display:none;">
+                                <select id="advisorSelect">
+                                    <option value="">Choose an advisor...</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="input-wrapper">
                             <textarea 
@@ -220,6 +233,8 @@
         let isLoading = false;
         let userProfile = null;
         let askAllMode = false;
+        let currentMode = 'board';
+        let directAdvisorId = null;
         let actionPlans = [];
 
         const allAdvisors = {
@@ -269,10 +284,53 @@
         function updateAdvisorCountPill() {
             const active = getActiveAdvisors();
             const count = Object.keys(active).length;
+            const pill = document.getElementById('advisorCountPill');
             const text = document.getElementById('advisorCountText');
-            if (text) {
+            if (!text || !pill) return;
+            const icon = pill.querySelector('i');
+            if (currentMode === 'direct' && directAdvisorId && active[directAdvisorId]) {
+                if (icon) icon.className = 'fas fa-user';
+                text.textContent = `Direct: ${active[directAdvisorId].title}`;
+            } else {
+                if (icon) icon.className = 'fas fa-users';
                 text.textContent = count === 1 ? '1 Advisor on Your Board' : `${count} Advisors on Your Board`;
             }
+        }
+
+        function populateAdvisorSelect() {
+            const select = document.getElementById('advisorSelect');
+            if (!select) return;
+            const active = getActiveAdvisors();
+            select.innerHTML = '<option value="">Choose an advisor...</option>';
+            Object.entries(active).forEach(([id, adv]) => {
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = adv.title;
+                if (id === directAdvisorId) opt.selected = true;
+                select.appendChild(opt);
+            });
+            if (directAdvisorId && !active[directAdvisorId]) {
+                directAdvisorId = null;
+            }
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            const boardBtn = document.getElementById('boardModeBtn');
+            const directBtn = document.getElementById('directModeBtn');
+            const askAllToggle = document.getElementById('askAllToggle');
+            const directSelector = document.getElementById('directAdvisorSelector');
+            boardBtn.classList.toggle('active', mode === 'board');
+            directBtn.classList.toggle('active', mode === 'direct');
+            askAllToggle.style.display = mode === 'board' ? '' : 'none';
+            directSelector.style.display = mode === 'direct' ? '' : 'none';
+            if (mode === 'direct') {
+                populateAdvisorSelect();
+                messageInput.placeholder = 'Ask your selected advisor a question...';
+            } else {
+                messageInput.placeholder = 'Ask your advisory board a question...';
+            }
+            updateAdvisorCountPill();
         }
 
         function updateBoardSelectedCount() {
@@ -345,6 +403,7 @@
             }
 
             updateAdvisorCountPill();
+            populateAdvisorSelect();
             setupDropTarget();
         }
 
@@ -664,10 +723,18 @@
             }
         });
 
+        document.getElementById('boardModeBtn').addEventListener('click', () => setMode('board'));
+        document.getElementById('directModeBtn').addEventListener('click', () => setMode('direct'));
+
         const askAllToggle = document.getElementById('askAllToggle');
         askAllToggle.addEventListener('click', () => {
             askAllMode = !askAllMode;
             askAllToggle.classList.toggle('active', askAllMode);
+        });
+
+        document.getElementById('advisorSelect').addEventListener('change', function() {
+            directAdvisorId = this.value || null;
+            updateAdvisorCountPill();
         });
 
         chatForm.addEventListener('submit', async (e) => {
@@ -676,10 +743,16 @@
             const message = messageInput.value.trim();
             if (!message || isLoading) return;
 
-            const welcomeMsg = chatMessages.querySelector('.welcome-message');
-            if (welcomeMsg) {
-                welcomeMsg.remove();
+            if (currentMode === 'direct' && !directAdvisorId) {
+                const select = document.getElementById('advisorSelect');
+                select.focus();
+                select.style.borderColor = 'var(--accent-gold)';
+                setTimeout(() => select.style.borderColor = '', 1500);
+                return;
             }
+
+            const welcomeMsg = chatMessages.querySelector('.welcome-message');
+            if (welcomeMsg) welcomeMsg.remove();
 
             addMessage(message, 'user');
             messageInput.value = '';
@@ -689,28 +762,42 @@
             const loadingId = addLoadingMessage();
 
             try {
-                const response = await fetch('/api/chat/all', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        message: message,
-                        session_id: sessionId,
-                        ask_all: askAllMode
-                    })
-                });
-
-                const data = await response.json();
-                
-                removeLoadingMessage(loadingId);
-
-                if (data.error) {
-                    addMessage('Sorry, there was an error processing your request. Please try again.', 'error');
-                } else if (data.mode === 'orchestrated') {
-                    addOrchestratedResponse(data);
+                if (currentMode === 'direct') {
+                    const response = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message: message,
+                            session_id: sessionId,
+                            advisor: directAdvisorId
+                        })
+                    });
+                    const data = await response.json();
+                    removeLoadingMessage(loadingId);
+                    if (data.error) {
+                        addMessage('Sorry, there was an error processing your request. Please try again.', 'error');
+                    } else {
+                        addDirectResponse(data, directAdvisorId);
+                    }
                 } else {
-                    addAllAdvisorResponses(data.responses);
+                    const response = await fetch('/api/chat/all', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message: message,
+                            session_id: sessionId,
+                            ask_all: askAllMode
+                        })
+                    });
+                    const data = await response.json();
+                    removeLoadingMessage(loadingId);
+                    if (data.error) {
+                        addMessage('Sorry, there was an error processing your request. Please try again.', 'error');
+                    } else if (data.mode === 'orchestrated') {
+                        addOrchestratedResponse(data);
+                    } else {
+                        addAllAdvisorResponses(data.responses);
+                    }
                 }
             } catch (error) {
                 removeLoadingMessage(loadingId);
@@ -763,6 +850,25 @@
             }
 
             chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function addDirectResponse(data, advisorId) {
+            const advisor = allAdvisors[advisorId] || {};
+            const containerDiv = document.createElement('div');
+            containerDiv.className = 'advisor-responses-container direct-mode-response';
+            const responseDiv = document.createElement('div');
+            responseDiv.className = 'advisor-response';
+            responseDiv.innerHTML = `
+                <div class="advisor-response-header">
+                    <i class="fas fa-${advisor.icon || 'user'}"></i>
+                    <span class="advisor-title">${data.advisor ? data.advisor.title : (advisor.title || '')}</span>
+                    <span class="direct-mode-tag"><i class="fas fa-user"></i> Direct</span>
+                </div>
+                <div class="advisor-response-content">${formatMessage(data.response)}</div>
+            `;
+            containerDiv.appendChild(responseDiv);
+            chatMessages.appendChild(containerDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
