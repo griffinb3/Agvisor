@@ -112,11 +112,9 @@ ADVISOR_ORDER = BASE_ADVISOR_IDS + OPTIONAL_ADVISOR_IDS
 def get_active_advisors(session_id):
     user_profile = user_profiles.get(session_id, {})
     selected = user_profile.get('selected_advisors', [])
-    active = {aid: ALL_ADVISORS[aid] for aid in BASE_ADVISOR_IDS}
-    for advisor_id in selected:
-        if advisor_id in OPTIONAL_ADVISORS:
-            active[advisor_id] = OPTIONAL_ADVISORS[advisor_id]
-    return active
+    if not selected:
+        return {aid: ALL_ADVISORS[aid] for aid in BASE_ADVISOR_IDS}
+    return {aid: ALL_ADVISORS[aid] for aid in selected if aid in ALL_ADVISORS}
 
 
 def detect_specific_advisor(message, active_advisors):
@@ -192,8 +190,7 @@ def get_advisor_response(advisor_id, message, session_id, user_profile):
 @app.route('/')
 def index():
     return render_template('index.html',
-                           base_advisors=BASE_ADVISORS,
-                           optional_advisors=OPTIONAL_ADVISORS,
+                           all_advisors=ALL_ADVISORS,
                            states=US_STATES,
                            board_suggestions=BOARD_SUGGESTIONS)
 

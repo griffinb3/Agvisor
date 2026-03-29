@@ -66,42 +66,28 @@
 
                 <div class="form-group">
                     <label>Build Your Advisory Board</label>
-                    <p class="form-hint">Your board always includes 5 core advisors. Add optional specialists below.</p>
-                    
-                    <div class="base-advisors-info">
-                        <p class="board-section-label"><i class="fas fa-lock"></i> Core Board Members (always active)</p>
-                        <div class="base-advisor-chips">
-                            {% for id, advisor in base_advisors.items() %}
-                            <span class="advisor-chip base-chip">
-                                <i class="fas fa-{{ advisor.icon }}"></i> {{ advisor.title }}
-                            </span>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                    <div class="optional-advisors-section">
-                        <p class="board-section-label"><i class="fas fa-plus-circle"></i> Optional Specialists</p>
-                        <div id="boardSuggestion" class="board-suggestion" style="display: none;"></div>
-                        <div class="optional-advisor-list">
-                            {% for id, advisor in optional_advisors.items() %}
-                            <label class="optional-advisor-checkbox" data-advisor-id="{{ id }}">
-                                <input type="checkbox" name="optional_advisors" value="{{ id }}">
-                                <div class="advisor-checkbox-card">
-                                    <div class="advisor-checkbox-icon">
-                                        <i class="fas fa-{{ advisor.icon }}"></i>
-                                    </div>
-                                    <div class="advisor-checkbox-info">
-                                        <strong>{{ advisor.title }}</strong>
-                                        <span>{{ advisor.specialty }}</span>
-                                    </div>
-                                    <div class="advisor-checkbox-check">
-                                        <i class="fas fa-check"></i>
-                                    </div>
+                    <p class="form-hint">Select the advisors you want on your board. Choose as many as you like.</p>
+                    <div id="boardSuggestion" class="board-suggestion" style="display: none;"></div>
+                    <div class="optional-advisor-list">
+                        {% for id, advisor in all_advisors.items() %}
+                        <label class="optional-advisor-checkbox" data-advisor-id="{{ id }}">
+                            <input type="checkbox" name="selected_advisors" value="{{ id }}">
+                            <div class="advisor-checkbox-card">
+                                <div class="advisor-checkbox-icon">
+                                    <i class="fas fa-{{ advisor.icon }}"></i>
                                 </div>
-                            </label>
-                            {% endfor %}
-                        </div>
+                                <div class="advisor-checkbox-info">
+                                    <strong>{{ advisor.title }}</strong>
+                                    <span>{{ advisor.specialty }}</span>
+                                </div>
+                                <div class="advisor-checkbox-check">
+                                    <i class="fas fa-check"></i>
+                                </div>
+                            </div>
+                        </label>
+                        {% endfor %}
                     </div>
+                    <p class="form-hint board-selected-count" id="boardSelectedCount" style="margin-top:0.5rem;"></p>
                 </div>
                 
                 <div class="form-group">
@@ -167,7 +153,7 @@
                     <div class="current-advisor">
                         <span>Advisory Board Mode: </span>
                         <strong>Multi-Agent Orchestration</strong>
-                        <span class="orchestration-badge"><i class="fas fa-project-diagram"></i> Board Chair routes your questions</span>
+                        <span class="orchestration-badge" id="advisorCountPill"><i class="fas fa-users"></i> <span id="advisorCountText">0 Advisors on Your Board</span></span>
                     </div>
                 </div>
 
@@ -236,18 +222,8 @@
         let askAllMode = false;
         let actionPlans = [];
 
-        const baseAdvisors = {
-            {% for id, advisor in base_advisors.items() %}
-            '{{ id }}': {
-                title: '{{ advisor.title }}',
-                specialty: '{{ advisor.specialty }}',
-                icon: '{{ advisor.icon }}'
-            },
-            {% endfor %}
-        };
-
-        const optionalAdvisors = {
-            {% for id, advisor in optional_advisors.items() %}
+        const allAdvisors = {
+            {% for id, advisor in all_advisors.items() %}
             '{{ id }}': {
                 title: '{{ advisor.title }}',
                 specialty: '{{ advisor.specialty }}',
@@ -282,13 +258,29 @@
 
         function getActiveAdvisors() {
             const selected = (userProfile && userProfile.selected_advisors) ? userProfile.selected_advisors : [];
-            const active = {...baseAdvisors};
+            if (!selected.length) return {};
+            const active = {};
             selected.forEach(id => {
-                if (optionalAdvisors[id]) {
-                    active[id] = optionalAdvisors[id];
-                }
+                if (allAdvisors[id]) active[id] = allAdvisors[id];
             });
             return active;
+        }
+
+        function updateAdvisorCountPill() {
+            const active = getActiveAdvisors();
+            const count = Object.keys(active).length;
+            const text = document.getElementById('advisorCountText');
+            if (text) {
+                text.textContent = count === 1 ? '1 Advisor on Your Board' : `${count} Advisors on Your Board`;
+            }
+        }
+
+        function updateBoardSelectedCount() {
+            const checked = document.querySelectorAll('.optional-advisor-checkbox input[type="checkbox"]:checked').length;
+            const el = document.getElementById('boardSelectedCount');
+            if (el) {
+                el.textContent = checked === 0 ? 'No advisors selected yet' : checked === 1 ? '1 advisor selected' : `${checked} advisors selected`;
+            }
         }
 
         const advisorOrder = ['financial', 'operations', 'marketing', 'legal', 'risk', 'commodity_risk', 'livestock', 'sustainability', 'agronomist'];
@@ -329,23 +321,20 @@
             const activeIds = sortAdvisorIds(Object.keys(active));
             activeIds.forEach(id => {
                 const advisor = active[id];
-                const isOptional = !!optionalAdvisors[id];
-                const card = createAdvisorCard(id, advisor, { removable: isOptional });
-                if (isOptional) {
-                    card.querySelector('.remove-advisor-btn').addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        removeAdvisorFromBoard(id);
-                    });
-                }
+                const card = createAdvisorCard(id, advisor, { removable: true });
+                card.querySelector('.remove-advisor-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeAdvisorFromBoard(id);
+                });
                 advisorList.appendChild(card);
             });
 
-            const unselected = Object.keys(optionalAdvisors).filter(id => !selectedIds.includes(id));
+            const unselected = Object.keys(allAdvisors).filter(id => !selectedIds.includes(id));
             if (unselected.length > 0) {
                 availableSection.style.display = 'block';
                 availableAdvisors.innerHTML = '';
                 sortAdvisorIds(unselected).forEach(id => {
-                    const advisor = optionalAdvisors[id];
+                    const advisor = allAdvisors[id];
                     const card = createAdvisorCard(id, advisor, { draggable: true });
                     setupDragSource(card, id);
                     card.addEventListener('click', () => addAdvisorToBoard(id));
@@ -355,6 +344,7 @@
                 availableSection.style.display = 'none';
             }
 
+            updateAdvisorCountPill();
             setupDropTarget();
         }
 
@@ -394,7 +384,7 @@
                 advisorList.classList.remove('drop-zone-hover');
                 advisorList.classList.remove('drop-zone-active');
                 const advisorId = e.dataTransfer.getData('text/plain');
-                if (advisorId && optionalAdvisors[advisorId]) {
+                if (advisorId && allAdvisors[advisorId]) {
                     addAdvisorToBoard(advisorId);
                 }
             });
@@ -429,6 +419,7 @@
                     cb.closest('.optional-advisor-checkbox').classList.remove('checked');
                 }
             });
+            updateBoardSelectedCount();
         }
 
         function syncBoardToBackend() {
@@ -477,6 +468,7 @@
                         }
                     });
                 }
+                updateBoardSelectedCount();
             } else {
                 boardSuggestionDiv.style.display = 'none';
             }
@@ -489,8 +481,11 @@
                 } else {
                     this.closest('.optional-advisor-checkbox').classList.remove('checked');
                 }
+                updateBoardSelectedCount();
             });
         });
+
+        updateBoardSelectedCount();
 
         const fileInput = document.getElementById('businessRecords');
         const fileLabel = document.getElementById('fileLabel');
@@ -632,6 +627,7 @@
                         boardSuggestionDiv.style.display = 'block';
                     }
                 }
+                updateBoardSelectedCount();
             }
             showModal();
         });
