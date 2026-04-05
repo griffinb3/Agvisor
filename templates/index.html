@@ -810,6 +810,11 @@
             messageInput.value = '';
             messageInput.style.height = 'auto';
 
+            const graphTab = detectGraphRequest(message);
+            if (graphTab) {
+                openDashboard(graphTab === 'auto' ? undefined : graphTab);
+            }
+
             isLoading = true;
             const loadingId = addLoadingMessage();
 
@@ -1526,6 +1531,30 @@
             });
         });
 
+        const GRAPH_TAB_PATTERNS = [
+            { tab: 'line',     words: ['line chart', 'line graph', 'trend', 'over time', 'historical', 'history', 'trajectory', 'revenue trend', 'income trend'] },
+            { tab: 'bar',      words: ['bar chart', 'bar graph', 'compare', 'comparison', 'grouped', 'side by side', 'period comparison'] },
+            { tab: 'doughnut', words: ['pie chart', 'pie graph', 'donut', 'doughnut', 'composition', 'breakdown', 'distribution', 'proportion'] },
+            { tab: 'scatter',  words: ['scatter', 'margin', 'profitability', 'revenue vs', 'correlation'] },
+        ];
+
+        const GRAPH_REQUEST_KEYWORDS = [
+            'show me', 'show my', 'see my', 'view my', 'display', 'open', 'pull up',
+            'graph', 'chart', 'visual', 'plot', 'dashboard', 'visualize',
+            'financial data', 'my data', 'my numbers', 'my figures'
+        ];
+
+        function detectGraphRequest(text) {
+            if (!hasFinancialData) return null;
+            const lower = text.toLowerCase();
+            const isGraphRequest = GRAPH_REQUEST_KEYWORDS.some(kw => lower.includes(kw));
+            if (!isGraphRequest) return null;
+            for (const { tab, words } of GRAPH_TAB_PATTERNS) {
+                if (words.some(w => lower.includes(w))) return tab;
+            }
+            return 'auto';
+        }
+
         const DASHBOARD_KEYWORDS = ['dashboard', 'visual', 'graph', 'chart', 'see your metrics', 'pull it up', 'financial dashboard', 'visualize', 'see the trends', 'trend visually'];
 
         function hasDashboardOffer(text) {
@@ -1534,11 +1563,11 @@
             return DASHBOARD_KEYWORDS.some(kw => lower.includes(kw));
         }
 
-        function appendDashboardButton(container) {
+        function appendDashboardButton(container, preferredTab) {
             const btn = document.createElement('button');
             btn.className = 'inline-dashboard-btn';
             btn.innerHTML = '<i class="fas fa-chart-line"></i> Open Financial Dashboard';
-            btn.addEventListener('click', openDashboard);
+            btn.addEventListener('click', () => openDashboard(preferredTab));
             container.appendChild(btn);
         }
 
