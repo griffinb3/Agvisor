@@ -321,3 +321,111 @@ def analyze_records(headers, preview_rows):
     except Exception as e:
         logger.warning(f"Failed to analyze financial records: {e}")
         return None
+
+
+def _linear_regression(values):
+    n = len(values)
+    if n < 2:
+        return None, None
+    xs = list(range(n))
+    sx = sum(xs)
+    sy = sum(values)
+    sxy = sum(x * y for x, y in zip(xs, values))
+    sxx = sum(x * x for x in xs)
+    denom = n * sxx - sx * sx
+    if denom == 0:
+        return None, None
+    slope = (n * sxy - sx * sy) / denom
+    intercept = (sy - slope * sx) / n
+    return slope, intercept
+
+
+def _predict_values(values, periods_forward=2):
+    clean = [v for v in values if v is not None]
+    if len(clean) < 2:
+        return []
+    slope, intercept = _linear_regression(clean)
+    if slope is None:
+        return []
+    n = len(clean)
+    return [round(slope * (n + i) + intercept, 2) for i in range(periods_forward)]
+
+
+def get_chart_data(rows, headers):
+    if not rows or not headers:
+        return {'has_data': False}
+
+    col_mapping = _map_columns(headers)
+    if not col_mapping:
+        return {'has_data': False}
+
+    has_financial = any(k in col_mapping for k in [
+        'revenue', 'expenses', 'net_income', 'assets', 'liabilities', 'equity',
+        'gross_profit', 'operating_income', 'cogs'
+    ])
+    if not has_financial:
+        return {'has_data': False}
+
+    has_year = 'year' in col_mapping
+    labels = []
+    raw = {'revenue': [], 'expenses': [], 'net_income': [], 'gross_profit': []}
+    margins = {'gross_margin': [], 'net_margin': [], 'operating_margin': []}
+    ratios = {'current_ratio': [], 'debt_to_equity': [], 'debt_to_asset': []}
+
+    for i, row in enumerate(rows[:20]):
+        year_val = row.get(col_mapping.get('year', ''), '') if has_year else ''
+        label = str(year_val).strip() if year_val and str(year_val).strip() else f"Period {i + 1}"
+        labels.append(label)
+
+        m = _compute_row_metrics(row, col_mapping)
+        raw['revenue'].append(m.get('_revenue'))
+        raw['expenses'].append(m.get('_expenses'))
+        raw['net_income'].append(m.get('_net_income'))
+        gp = _get_val(row, col_mapping, 'gross_profit')
+        if gp is None and m.get('_revenue') is not None and _get_val(row, col_mapping, 'cogs') is not None:
+            gp = m['_revenue'] - _get_val(row, col_mapping, 'cogs')
+        raw['gross_profit'].append(gp)
+
+        margins['gross_margin'].append(m.get('gross_margin'))
+        margins['net_margin'].append(m.get('net_margin'))
+        margins['operating_margin'].append(m.get('operating_margin'))
+
+        ratios['current_ratio'].append(m.get('current_ratio'))
+        ratios['debt_to_equity'].append(m.get('debt_to_equity'))
+        ratios['debt_to_asset'].append(m.get('debt_to_asset'))
+
+    def _has_values(lst):
+        return any(v is not None for v in lst)
+
+    datasets = {k: v for k, v in raw.items() if _has_values(v)}
+    margins = {k: v for k, v in margins.items() if _has_values(v)}
+    ratios = {k: v for k, v in ratios.items() if _has_values(v)}
+
+    prediction_labels = []
+    predictions = {}
+    if len(labels) >= 2:
+        try:
+            years = [int(lbl) for lbl in labels]
+            last_year = max(years)
+            prediction_labels = [f"{last_year + 1} (proj.)", f"{last_year + 2} (proj.)"]
+        except (ValueError, TypeError):
+            prediction_labels = ["Next Period (proj.)", "Period +2 (proj.)"]
+
+        for key in ['revenue', 'expenses', 'net_income']:
+            if key in datasets:
+                preds = _predict_values(datasets[key], 2)
+                if preds:
+                    predictions[key] = preds
+
+    if not labels:
+        return {'has_data': False}
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'prediction_labels': prediction_labels,
+        'datasets': datasets,
+        'margins': margins,
+        'ratios': ratios,
+        'predictions': predictions
+    }

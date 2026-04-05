@@ -142,7 +142,11 @@ class BaseAdvisor:
 
             base += context
 
-        base += "\n\nRESPONSE FORMAT: Keep your response concise. Write ONE short paragraph of analysis or advice, then list your TWO most important suggestions as numbered items. Do not exceed this format."
+        has_financial = bool(user_profile and user_profile.get('financial_analysis'))
+        base += "\n\nCONVERSATIONAL STYLE: Be direct, warm, and advisory — like a trusted expert on a board call. You may ask ONE focused follow-up question at the end of your response when a specific piece of information would meaningfully sharpen your advice. Only ask if genuinely useful; never ask just to fill space."
+        if has_financial:
+            base += " The user has uploaded financial records. When your analysis touches on their metrics or multi-year trends, you may offer to visualize the data — say something like: 'Your Financial Dashboard can show these trends visually — would you like to pull it up?' The dashboard is available in the app at any time."
+        base += "\n\nRESPONSE FORMAT: Write ONE concise paragraph of analysis or advice, then list your TWO most important suggestions as numbered items. If you have a follow-up question, add it after the suggestions on a new line starting with '❓'. Keep the entire response tight and actionable."
 
         return base
 

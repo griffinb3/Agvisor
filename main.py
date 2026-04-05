@@ -384,6 +384,28 @@ def chat_all():
     })
 
 
+@app.route('/api/charts', methods=['GET'])
+def get_charts():
+    session_id = request.args.get('session_id', 'default')
+    user_profile = user_profiles.get(session_id, {})
+    business_data = user_profile.get('business_data')
+
+    if not business_data:
+        return jsonify({'has_data': False, 'message': 'No financial data uploaded'})
+
+    rows = business_data.get('preview', [])
+    headers = business_data.get('headers', [])
+
+    try:
+        from data.financial_analysis import get_chart_data
+        chart_data = get_chart_data(rows, headers)
+    except Exception as e:
+        logger.error(f"Chart generation error: {e}")
+        return jsonify({'has_data': False, 'message': 'Could not generate chart data'})
+
+    return jsonify(chart_data)
+
+
 @app.route('/api/clear', methods=['POST'])
 def clear_history():
     data = request.json

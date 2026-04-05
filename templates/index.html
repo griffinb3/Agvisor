@@ -6,6 +6,7 @@
     <title>Agvisor - AI Advisory for Agricultural Businesses</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div id="onboardingModal" class="modal">
@@ -143,6 +144,9 @@
                         </div>
                     </div>
                 </div>
+                <button class="dashboard-btn" id="dashboardBtn" style="display:none;" onclick="openDashboard()">
+                    <i class="fas fa-chart-line"></i> Financial Dashboard
+                </button>
                 <button class="clear-btn" id="clearChat">
                     <i class="fas fa-trash-alt"></i> Clear Conversation
                 </button>
@@ -207,6 +211,42 @@
                     </form>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <div class="dashboard-overlay" id="dashboardOverlay" onclick="closeDashboard()"></div>
+    <div class="dashboard-modal" id="dashboardModal">
+        <div class="dashboard-modal-header">
+            <div class="dashboard-title">
+                <i class="fas fa-chart-line"></i>
+                <span>Financial Dashboard</span>
+                <span class="dashboard-subtitle" id="dashboardSubtitle"></span>
+            </div>
+            <button class="dashboard-close-btn" onclick="closeDashboard()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="dashboard-tabs">
+            <button class="dash-tab active" data-tab="performance"><i class="fas fa-chart-bar"></i> Performance</button>
+            <button class="dash-tab" data-tab="margins"><i class="fas fa-percent"></i> Margins</button>
+            <button class="dash-tab" data-tab="ratios"><i class="fas fa-balance-scale"></i> Ratios</button>
+        </div>
+        <div class="dashboard-body">
+            <div class="dash-panel active" id="panel-performance">
+                <div class="chart-legend-note" id="perfNote"></div>
+                <div class="chart-wrap"><canvas id="chartPerformance"></canvas></div>
+            </div>
+            <div class="dash-panel" id="panel-margins">
+                <div class="chart-legend-note">Profitability margins over time. Higher is better.</div>
+                <div class="chart-wrap"><canvas id="chartMargins"></canvas></div>
+            </div>
+            <div class="dash-panel" id="panel-ratios">
+                <div class="chart-legend-note">Key financial ratios from your most recent period.</div>
+                <div class="chart-wrap"><canvas id="chartRatios"></canvas></div>
+            </div>
+        </div>
+        <div class="dashboard-no-data" id="dashboardNoData" style="display:none;">
+            <i class="fas fa-upload"></i>
+            <p>No financial data available</p>
+            <span>Upload a CSV or Excel file with your financial records to see charts here.</span>
         </div>
     </div>
 
@@ -582,6 +622,7 @@
                 
                 if (data.type === 'tabular') {
                     fileStatus.textContent = `Uploaded: ${data.row_count} records processed`;
+                    setHasFinancialData(true);
                 } else {
                     let detail = data.summary || 'Document processed';
                     fileStatus.textContent = `Uploaded: ${detail}`;
@@ -705,6 +746,11 @@
                     ...userProfile
                 })
             });
+
+            fetch(`/api/charts?session_id=${sessionId}`)
+                .then(r => r.json())
+                .then(d => { if (d.has_data) setHasFinancialData(true); })
+                .catch(() => {});
         } else {
             renderSidebar();
             showModal();
@@ -868,6 +914,8 @@
                 <div class="advisor-response-content">${formatMessage(data.response)}</div>
             `;
             containerDiv.appendChild(responseDiv);
+            checkAndAppendDashboard(data.response, containerDiv);
+            highlightFollowUpQuestion(containerDiv, data.response);
             chatMessages.appendChild(containerDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
@@ -876,6 +924,7 @@
             const containerDiv = document.createElement('div');
             containerDiv.className = 'advisor-responses-container';
             
+            const allText = responses.map(r => r.response).join(' ');
             responses.forEach(resp => {
                 const responseDiv = document.createElement('div');
                 responseDiv.className = 'advisor-response';
@@ -887,8 +936,9 @@
                     <div class="advisor-response-content">${formatMessage(resp.response)}</div>
                 `;
                 containerDiv.appendChild(responseDiv);
+                highlightFollowUpQuestion(containerDiv, resp.response);
             });
-            
+            checkAndAppendDashboard(allText, containerDiv);
             chatMessages.appendChild(containerDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
@@ -912,6 +962,7 @@
                 containerDiv.appendChild(routingDiv);
             }
 
+            const allText = data.responses.map(r => r.response).join(' ') + (data.summary || '');
             data.responses.forEach(resp => {
                 const responseDiv = document.createElement('div');
                 responseDiv.className = 'advisor-response';
@@ -923,6 +974,7 @@
                     <div class="advisor-response-content">${formatMessage(resp.response)}</div>
                 `;
                 containerDiv.appendChild(responseDiv);
+                highlightFollowUpQuestion(containerDiv, resp.response);
             });
 
             if (data.summary) {
@@ -945,8 +997,10 @@
                 summaryDiv.dataset.responses = JSON.stringify(data.responses);
                 summaryDiv.id = summaryId;
                 containerDiv.appendChild(summaryDiv);
+                highlightFollowUpQuestion(containerDiv, data.summary);
             }
 
+            checkAndAppendDashboard(allText, containerDiv);
             chatMessages.appendChild(containerDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
@@ -1260,6 +1314,231 @@
         }
 
         loadPlans();
+
+        let hasFinancialData = false;
+        let dashboardCharts = {};
+        let dashboardDataCache = null;
+
+        function setHasFinancialData(val) {
+            hasFinancialData = val;
+            dashboardDataCache = null;
+            const btn = document.getElementById('dashboardBtn');
+            if (btn) btn.style.display = val ? 'flex' : 'none';
+        }
+
+        async function openDashboard() {
+            document.getElementById('dashboardOverlay').style.display = 'block';
+            document.getElementById('dashboardModal').classList.add('open');
+            document.querySelector('.dash-tab[data-tab="performance"]').click();
+            if (!dashboardDataCache) {
+                await loadChartData();
+            } else {
+                renderCharts(dashboardDataCache);
+            }
+        }
+
+        function closeDashboard() {
+            document.getElementById('dashboardOverlay').style.display = 'none';
+            document.getElementById('dashboardModal').classList.remove('open');
+        }
+
+        async function loadChartData() {
+            try {
+                const resp = await fetch(`/api/charts?session_id=${sessionId}`);
+                const data = await resp.json();
+                const noDataEl = document.getElementById('dashboardNoData');
+                const bodyEl = document.querySelector('.dashboard-body');
+                if (!data.has_data) {
+                    noDataEl.style.display = 'flex';
+                    bodyEl.style.display = 'none';
+                    return;
+                }
+                noDataEl.style.display = 'none';
+                bodyEl.style.display = '';
+                dashboardDataCache = data;
+                renderCharts(data);
+            } catch (err) {
+                console.error('Dashboard load error:', err);
+            }
+        }
+
+        function fmtMoney(v) {
+            if (v == null) return null;
+            if (Math.abs(v) >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+            if (Math.abs(v) >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
+            return '$' + v.toFixed(0);
+        }
+
+        function renderCharts(data) {
+            Object.values(dashboardCharts).forEach(c => c.destroy());
+            dashboardCharts = {};
+
+            const GREEN = 'rgba(45,90,39,';
+            const GOLD = 'rgba(201,162,39,';
+            const BLUE = 'rgba(52,152,219,';
+            const RED = 'rgba(231,76,60,';
+
+            const predCount = (data.prediction_labels || []).length;
+            const allLabels = [...data.labels, ...(data.prediction_labels || [])];
+
+            const perfNote = document.getElementById('perfNote');
+            if (perfNote) {
+                perfNote.textContent = predCount > 0
+                    ? `Historical data (${data.labels.join(', ')}) + ${predCount} projected period${predCount > 1 ? 's' : ''} (dashed lines).`
+                    : `Financial performance over ${data.labels.length} period${data.labels.length > 1 ? 's' : ''}.`;
+            }
+
+            const subtitle = document.getElementById('dashboardSubtitle');
+            if (subtitle && userProfile && userProfile.business_name) {
+                subtitle.textContent = '— ' + userProfile.business_name;
+            }
+
+            function buildDataset(key, label, colorBase, type) {
+                if (!data.datasets[key]) return null;
+                const actual = data.datasets[key];
+                const preds = (data.predictions && data.predictions[key]) || [];
+                const allVals = [...actual, ...preds];
+                const cutoff = actual.length - 1;
+                return {
+                    label,
+                    data: allVals,
+                    backgroundColor: allVals.map((_, i) => i <= cutoff ? colorBase + '0.75)' : colorBase + '0.35)'),
+                    borderColor: colorBase + '1)',
+                    borderWidth: 2,
+                    type,
+                    fill: false,
+                    tension: 0.3,
+                    segment: {
+                        borderDash: (ctx) => ctx.p0DataIndex >= cutoff ? [6, 4] : []
+                    },
+                    pointRadius: allVals.map((_, i) => i > cutoff ? 4 : 3),
+                    pointStyle: allVals.map((_, i) => i > cutoff ? 'triangle' : 'circle')
+                };
+            }
+
+            const perfCtx = document.getElementById('chartPerformance');
+            if (perfCtx) {
+                const datasets = [
+                    buildDataset('revenue', 'Revenue', GREEN, 'bar'),
+                    buildDataset('expenses', 'Expenses', GOLD, 'bar'),
+                    buildDataset('net_income', 'Net Income', BLUE, 'line'),
+                ].filter(Boolean);
+                dashboardCharts.performance = new Chart(perfCtx, {
+                    type: 'bar',
+                    data: { labels: allLabels, datasets },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: {
+                            y: { ticks: { callback: v => fmtMoney(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
+                            x: { grid: { display: false } }
+                        },
+                        plugins: {
+                            legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } },
+                            tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + (fmtMoney(ctx.raw) || ctx.raw) } }
+                        }
+                    }
+                });
+            }
+
+            const marginsCtx = document.getElementById('chartMargins');
+            if (marginsCtx && Object.keys(data.margins).length > 0) {
+                const palette = [GREEN, GOLD, BLUE];
+                const mDatasets = Object.entries(data.margins).map(([key, vals], i) => {
+                    const c = palette[i % palette.length];
+                    return {
+                        label: key.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase()),
+                        data: vals,
+                        borderColor: c + '1)',
+                        backgroundColor: c + '0.1)',
+                        fill: true, tension: 0.3, borderWidth: 2,
+                        pointRadius: 4
+                    };
+                });
+                dashboardCharts.margins = new Chart(marginsCtx, {
+                    type: 'line',
+                    data: { labels: data.labels, datasets: mDatasets },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: {
+                            y: { ticks: { callback: v => v + '%' }, grid: { color: 'rgba(0,0,0,0.06)' } },
+                            x: { grid: { display: false } }
+                        },
+                        plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } } }
+                    }
+                });
+            }
+
+            const ratiosCtx = document.getElementById('chartRatios');
+            if (ratiosCtx && Object.keys(data.ratios).length > 0) {
+                const rLabels = [], rVals = [], rColors = [];
+                const rPalette = [GREEN + '0.8)', GOLD + '0.8)', BLUE + '0.8)', RED + '0.8)'];
+                let ci = 0;
+                for (const [key, vals] of Object.entries(data.ratios)) {
+                    const clean = vals.filter(v => v != null);
+                    if (clean.length > 0) {
+                        rLabels.push(key.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase()));
+                        rVals.push(+clean[clean.length - 1].toFixed(2));
+                        rColors.push(rPalette[ci++ % rPalette.length]);
+                    }
+                }
+                dashboardCharts.ratios = new Chart(ratiosCtx, {
+                    type: 'bar',
+                    data: { labels: rLabels, datasets: [{ label: 'Latest Period', data: rVals, backgroundColor: rColors, borderWidth: 0, borderRadius: 4 }] },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        scales: { x: { grid: { color: 'rgba(0,0,0,0.06)' } }, y: { grid: { display: false } } },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            }
+        }
+
+        document.querySelectorAll('.dash-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.dash-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.dash-panel').forEach(p => p.classList.remove('active'));
+                this.classList.add('active');
+                document.getElementById('panel-' + this.dataset.tab).classList.add('active');
+                if (dashboardDataCache) {
+                    setTimeout(() => {
+                        Object.values(dashboardCharts).forEach(c => c.resize());
+                    }, 50);
+                }
+            });
+        });
+
+        const DASHBOARD_KEYWORDS = ['dashboard', 'visual', 'graph', 'chart', 'see your metrics', 'pull it up', 'financial dashboard', 'visualize', 'see the trends', 'trend visually'];
+
+        function hasDashboardOffer(text) {
+            if (!hasFinancialData) return false;
+            const lower = text.toLowerCase();
+            return DASHBOARD_KEYWORDS.some(kw => lower.includes(kw));
+        }
+
+        function appendDashboardButton(container) {
+            const btn = document.createElement('button');
+            btn.className = 'inline-dashboard-btn';
+            btn.innerHTML = '<i class="fas fa-chart-line"></i> Open Financial Dashboard';
+            btn.addEventListener('click', openDashboard);
+            container.appendChild(btn);
+        }
+
+        function checkAndAppendDashboard(text, container) {
+            if (hasDashboardOffer(text)) {
+                appendDashboardButton(container);
+            }
+        }
+
+        function highlightFollowUpQuestion(container, text) {
+            const lines = text.split('\n');
+            const qLine = lines.find(l => l.trim().startsWith('❓'));
+            if (!qLine) return;
+            const qEl = document.createElement('div');
+            qEl.className = 'advisor-question';
+            qEl.innerHTML = `<i class="fas fa-question-circle"></i> ${escapeHtml(qLine.replace(/^❓\s*/, '').trim())}`;
+            container.appendChild(qEl);
+        }
     </script>
 </body>
 </html>
