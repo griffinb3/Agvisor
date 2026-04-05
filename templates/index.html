@@ -915,7 +915,6 @@
             `;
             containerDiv.appendChild(responseDiv);
             checkAndAppendDashboard(data.response, containerDiv);
-            highlightFollowUpQuestion(containerDiv, data.response);
             chatMessages.appendChild(containerDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
@@ -936,7 +935,6 @@
                     <div class="advisor-response-content">${formatMessage(resp.response)}</div>
                 `;
                 containerDiv.appendChild(responseDiv);
-                highlightFollowUpQuestion(containerDiv, resp.response);
             });
             checkAndAppendDashboard(allText, containerDiv);
             chatMessages.appendChild(containerDiv);
@@ -973,7 +971,6 @@
             summaryDiv.id = summaryId;
             containerDiv.appendChild(summaryDiv);
 
-            highlightFollowUpQuestion(containerDiv, summaryText);
             checkAndAppendDashboard(summaryText, containerDiv);
 
             chatMessages.appendChild(containerDiv);
@@ -1019,7 +1016,8 @@
         }
 
         function formatMessage(text) {
-            let formatted = escapeHtml(text);
+            let cleaned = text.replace(/^❓\s*/gm, '');
+            let formatted = escapeHtml(cleaned);
             formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
             formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
             formatted = formatted.replace(/\n/g, '<br>');
@@ -1505,15 +1503,6 @@
             }
         }
 
-        function highlightFollowUpQuestion(container, text) {
-            const lines = text.split('\n');
-            const qLine = lines.find(l => l.trim().startsWith('❓'));
-            if (!qLine) return;
-            const qEl = document.createElement('div');
-            qEl.className = 'advisor-question';
-            qEl.innerHTML = `<i class="fas fa-question-circle"></i> ${escapeHtml(qLine.replace(/^❓\s*/, '').trim())}`;
-            container.appendChild(qEl);
-        }
     </script>
 </body>
 </html>
