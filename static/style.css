@@ -1712,6 +1712,28 @@ body {
     }
 }
 
+.board-summary-solo {
+    margin-top: 0;
+}
+
+.board-summary-solo .board-summary-header {
+    font-size: 0.9rem;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.board-consulted {
+    margin-left: auto;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 60%;
+}
+
 .dashboard-btn {
     display: none;
     align-items: center;

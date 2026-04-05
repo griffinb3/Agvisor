@@ -947,60 +947,35 @@
             const containerDiv = document.createElement('div');
             containerDiv.className = 'advisor-responses-container';
 
-            if (data.routing && data.routing.selected_titles) {
-                const routingDiv = document.createElement('div');
-                routingDiv.className = 'routing-info';
-                const titles = data.routing.selected_titles.join(', ');
-                const rationale = data.routing.rationale || '';
-                routingDiv.innerHTML = `
-                    <i class="fas fa-project-diagram"></i>
-                    <div class="routing-text">
-                        <div><strong>Board Chair</strong> directed this to: <span class="routing-advisors">${escapeHtml(titles)}</span></div>
-                        ${rationale ? `<div class="routing-rationale">${escapeHtml(rationale)}</div>` : ''}
-                    </div>
-                `;
-                containerDiv.appendChild(routingDiv);
-            }
+            const advisorNames = data.routing && data.routing.selected_titles
+                ? data.routing.selected_titles
+                : (data.responses || []).map(r => r.title);
 
-            const allText = data.responses.map(r => r.response).join(' ') + (data.summary || '');
-            data.responses.forEach(resp => {
-                const responseDiv = document.createElement('div');
-                responseDiv.className = 'advisor-response';
-                responseDiv.innerHTML = `
-                    <div class="advisor-response-header">
-                        <i class="fas fa-${resp.icon}"></i>
-                        <span class="advisor-title">${resp.title}</span>
-                    </div>
-                    <div class="advisor-response-content">${formatMessage(resp.response)}</div>
-                `;
-                containerDiv.appendChild(responseDiv);
-                highlightFollowUpQuestion(containerDiv, resp.response);
-            });
+            const summaryText = data.summary || '';
+            const summaryId = 'summary_' + Date.now();
+            const summaryDiv = document.createElement('div');
+            summaryDiv.className = 'board-summary board-summary-solo';
+            summaryDiv.innerHTML = `
+                <div class="board-summary-header">
+                    <i class="fas fa-users"></i>
+                    <span>Board Response</span>
+                    ${advisorNames.length ? `<span class="board-consulted">via ${escapeHtml(advisorNames.join(', '))}</span>` : ''}
+                </div>
+                <div class="board-summary-content">${formatMessage(summaryText)}</div>
+                <div class="board-summary-actions">
+                    <button class="save-plan-btn" data-summary-id="${summaryId}" onclick="saveAsPlan(this)">
+                        <i class="fas fa-save"></i> Save as Action Plan
+                    </button>
+                </div>
+            `;
+            summaryDiv.dataset.summaryText = summaryText;
+            summaryDiv.dataset.responses = JSON.stringify(data.responses || []);
+            summaryDiv.id = summaryId;
+            containerDiv.appendChild(summaryDiv);
 
-            if (data.summary) {
-                const summaryDiv = document.createElement('div');
-                summaryDiv.className = 'board-summary';
-                const summaryId = 'summary_' + Date.now();
-                summaryDiv.innerHTML = `
-                    <div class="board-summary-header">
-                        <i class="fas fa-clipboard-check"></i>
-                        <span>Board Summary</span>
-                    </div>
-                    <div class="board-summary-content">${formatMessage(data.summary)}</div>
-                    <div class="board-summary-actions">
-                        <button class="save-plan-btn" data-summary-id="${summaryId}" onclick="saveAsPlan(this)">
-                            <i class="fas fa-save"></i> Save as Action Plan
-                        </button>
-                    </div>
-                `;
-                summaryDiv.dataset.summaryText = data.summary;
-                summaryDiv.dataset.responses = JSON.stringify(data.responses);
-                summaryDiv.id = summaryId;
-                containerDiv.appendChild(summaryDiv);
-                highlightFollowUpQuestion(containerDiv, data.summary);
-            }
+            highlightFollowUpQuestion(containerDiv, summaryText);
+            checkAndAppendDashboard(summaryText, containerDiv);
 
-            checkAndAppendDashboard(allText, containerDiv);
             chatMessages.appendChild(containerDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
