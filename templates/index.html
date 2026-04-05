@@ -1384,17 +1384,39 @@
                 subtitle.textContent = '— ' + userProfile.business_name;
             }
 
-            const commonTooltipMoney = { callbacks: { label: ctx => ctx.dataset.label + ': ' + (fmtMoney(ctx.raw) || ctx.raw) } };
+            const PALETTE = [GREEN, GOLD, BLUE, RED, PURPLE,
+                'rgba(26,188,156,', 'rgba(243,156,18,', 'rgba(142,68,173,'];
+
+            const isGeneric = !!data.generic;
+
+            function fmtLabel(key) {
+                return key.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+            }
+
+            function fmtVal(v) {
+                if (v == null) return null;
+                const n = +v;
+                if (isNaN(n)) return String(v);
+                if (!isGeneric) return fmtMoney(n);
+                if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+                if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+                return n.toLocaleString();
+            }
+
+            const commonTooltip = { callbacks: { label: ctx => ctx.dataset.label + ': ' + (fmtVal(ctx.raw) ?? ctx.raw) } };
             const commonLegend = { position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 12 } } };
 
-            function buildTimeSeries(key, label, colorBase, chartType) {
+            const datasetKeys = Object.keys(data.datasets || {});
+
+            function buildSeries(key, chartType, ci) {
                 if (!data.datasets[key]) return null;
+                const colorBase = PALETTE[ci % PALETTE.length];
                 const actual = data.datasets[key];
                 const preds = (data.predictions && data.predictions[key]) || [];
                 const allVals = [...actual, ...preds];
                 const cutoff = actual.length - 1;
                 return {
-                    label, data: allVals, type: chartType,
+                    label: fmtLabel(key), data: allVals, type: chartType,
                     backgroundColor: allVals.map((_, i) => i <= cutoff ? colorBase + '0.7)' : colorBase + '0.3)'),
                     borderColor: colorBase + '1)', borderWidth: 2, fill: false, tension: 0.35,
                     segment: { borderDash: ctx => ctx.p0DataIndex >= cutoff ? [6, 4] : [] },
@@ -1408,25 +1430,21 @@
             if (lineNote) {
                 lineNote.textContent = predCount > 0
                     ? `Historical data (${data.labels.join(', ')}) + ${predCount} projected period${predCount > 1 ? 's' : ''} shown as dashed lines.`
-                    : `Revenue, expenses, and net income over ${data.labels.length} period${data.labels.length > 1 ? 's' : ''}.`;
+                    : `Data trends over ${data.labels.length} period${data.labels.length > 1 ? 's' : ''}.`;
             }
             const lineCtx = document.getElementById('chartLine');
             if (lineCtx) {
-                const datasets = [
-                    buildTimeSeries('revenue', 'Revenue', GREEN, 'line'),
-                    buildTimeSeries('expenses', 'Expenses', GOLD, 'line'),
-                    buildTimeSeries('net_income', 'Net Income', BLUE, 'line'),
-                ].filter(Boolean);
+                const datasets = datasetKeys.map((k, i) => buildSeries(k, 'line', i)).filter(Boolean);
                 dashboardCharts.line = new Chart(lineCtx, {
                     type: 'line',
                     data: { labels: allLabels, datasets },
                     options: {
                         responsive: true, maintainAspectRatio: false,
                         scales: {
-                            y: { ticks: { callback: v => fmtMoney(v) }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                            y: { ticks: { callback: v => fmtVal(v) }, grid: { color: 'rgba(0,0,0,0.05)' } },
                             x: { grid: { display: false } }
                         },
-                        plugins: { legend: commonLegend, tooltip: commonTooltipMoney }
+                        plugins: { legend: commonLegend, tooltip: commonTooltip }
                     }
                 });
             }
@@ -1436,25 +1454,21 @@
             if (barNote) {
                 barNote.textContent = predCount > 0
                     ? `Grouped comparison across periods. Lighter bars are projections.`
-                    : `Revenue, expenses, and net income compared across ${data.labels.length} period${data.labels.length > 1 ? 's' : ''}.`;
+                    : `Comparing ${datasetKeys.length} metric${datasetKeys.length > 1 ? 's' : ''} across ${data.labels.length} period${data.labels.length > 1 ? 's' : ''}.`;
             }
             const barCtx = document.getElementById('chartBar');
             if (barCtx) {
-                const datasets = [
-                    buildTimeSeries('revenue', 'Revenue', GREEN, 'bar'),
-                    buildTimeSeries('expenses', 'Expenses', GOLD, 'bar'),
-                    buildTimeSeries('net_income', 'Net Income', BLUE, 'bar'),
-                ].filter(Boolean);
+                const datasets = datasetKeys.map((k, i) => buildSeries(k, 'bar', i)).filter(Boolean);
                 dashboardCharts.bar = new Chart(barCtx, {
                     type: 'bar',
                     data: { labels: allLabels, datasets },
                     options: {
                         responsive: true, maintainAspectRatio: false,
                         scales: {
-                            y: { ticks: { callback: v => fmtMoney(v) }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                            y: { ticks: { callback: v => fmtVal(v) }, grid: { color: 'rgba(0,0,0,0.05)' } },
                             x: { grid: { display: false } }
                         },
-                        plugins: { legend: commonLegend, tooltip: commonTooltipMoney }
+                        plugins: { legend: commonLegend, tooltip: commonTooltip }
                     }
                 });
             }
@@ -1464,9 +1478,9 @@
             const comp = data.composition || {};
             const compKeys = Object.keys(comp);
             if (doughnutCtx && compKeys.length > 0) {
-                const labelMap = { revenue: 'Revenue', expenses: 'Expenses', net_income: 'Net Income', gross_profit: 'Gross Profit', cogs: 'Cost of Goods' };
-                const palette = [GREEN + '0.8)', GOLD + '0.8)', BLUE + '0.7)', RED + '0.7)', PURPLE + '0.7)'];
-                const dLabels = compKeys.map(k => labelMap[k] || k);
+                const canonicalMap = { revenue: 'Revenue', expenses: 'Expenses', net_income: 'Net Income', gross_profit: 'Gross Profit', cogs: 'Cost of Goods' };
+                const palette = PALETTE.map(c => c + '0.8)');
+                const dLabels = compKeys.map(k => canonicalMap[k] || fmtLabel(k));
                 const dVals = compKeys.map(k => Math.abs(comp[k]));
                 const dColors = compKeys.map((_, i) => palette[i % palette.length]);
                 dashboardCharts.doughnut = new Chart(doughnutCtx, {
@@ -1476,21 +1490,29 @@
                         responsive: true, maintainAspectRatio: false,
                         plugins: {
                             legend: commonLegend,
-                            tooltip: { callbacks: { label: ctx => ctx.label + ': ' + (fmtMoney(ctx.raw) || ctx.raw) } }
+                            tooltip: { callbacks: { label: ctx => ctx.label + ': ' + (fmtVal(ctx.raw) || ctx.raw) } }
                         }
                     }
                 });
             }
 
-            // 4. SCATTER CHART — Revenue vs. Net Margin
+            // 4. SCATTER CHART — X vs Y (Revenue vs Net Margin, or first two numeric cols)
             const scatterCtx = document.getElementById('chartScatter');
             const scatterPts = data.scatter_data || [];
+            const xAxisLabel = isGeneric && data.x_label ? fmtLabel(data.x_label) : 'Revenue';
+            const yAxisLabel = isGeneric && data.y_label ? fmtLabel(data.y_label) : 'Net Margin (%)';
+            const scatterNote = document.querySelector('#panel-scatter .chart-legend-note');
+            if (scatterNote) {
+                scatterNote.textContent = isGeneric
+                    ? `${xAxisLabel} vs ${yAxisLabel} — correlation across your data points.`
+                    : 'Revenue vs. net margin — shows whether growth is improving or pressuring profitability.';
+            }
             if (scatterCtx && scatterPts.length > 0) {
                 dashboardCharts.scatter = new Chart(scatterCtx, {
                     type: 'scatter',
                     data: {
                         datasets: [{
-                            label: 'Revenue vs Net Margin',
+                            label: `${xAxisLabel} vs ${yAxisLabel}`,
                             data: scatterPts.map(p => ({ x: p.x, y: p.y })),
                             backgroundColor: GREEN + '0.7)',
                             borderColor: GREEN + '1)',
@@ -1500,15 +1522,15 @@
                     options: {
                         responsive: true, maintainAspectRatio: false,
                         scales: {
-                            x: { title: { display: true, text: 'Revenue' }, ticks: { callback: v => fmtMoney(v) }, grid: { color: 'rgba(0,0,0,0.05)' } },
-                            y: { title: { display: true, text: 'Net Margin (%)' }, ticks: { callback: v => v + '%' }, grid: { color: 'rgba(0,0,0,0.05)' } }
+                            x: { title: { display: true, text: xAxisLabel }, ticks: { callback: v => fmtVal(v) }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                            y: { title: { display: true, text: yAxisLabel }, ticks: { callback: v => fmtVal(v) }, grid: { color: 'rgba(0,0,0,0.05)' } }
                         },
                         plugins: {
                             legend: { display: false },
                             tooltip: { callbacks: {
                                 label: ctx => {
                                     const pt = scatterPts[ctx.dataIndex];
-                                    return `${pt ? pt.label : ''}: Rev ${fmtMoney(ctx.parsed.x)}, Margin ${ctx.parsed.y}%`;
+                                    return `${pt ? pt.label : ''}: ${xAxisLabel} ${fmtVal(ctx.parsed.x)}, ${yAxisLabel} ${fmtVal(ctx.parsed.y)}`;
                                 }
                             }}
                         }

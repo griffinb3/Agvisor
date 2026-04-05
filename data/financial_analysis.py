@@ -351,20 +351,121 @@ def _predict_values(values, periods_forward=2):
     return [round(slope * (n + i) + intercept, 2) for i in range(periods_forward)]
 
 
+_LABEL_HINTS = {'year', 'date', 'period', 'month', 'quarter', 'fy', 'fiscal', 'time', 'week', 'season', 'crop', 'variety', 'type', 'category', 'name', 'item', 'region', 'location', 'state', 'product'}
+
+
+def _get_generic_chart_data(rows, headers):
+    """Fallback: build chart data from ANY numeric columns in the file."""
+    if not rows or not headers:
+        return {'has_data': False}
+
+    # Find label column: prefer columns whose name hints at a period/category
+    label_col = None
+    for h in headers:
+        if any(hint in h.lower() for hint in _LABEL_HINTS):
+            label_col = h
+            break
+    if label_col is None:
+        label_col = headers[0]
+
+    # Collect numeric columns (excluding the label column)
+    numeric_cols = []
+    for h in headers:
+        if h == label_col:
+            continue
+        vals = [_safe_float(row.get(h)) for row in rows[:20]]
+        non_null = [v for v in vals if v is not None]
+        if len(non_null) >= max(1, len(rows[:20]) // 2):
+            numeric_cols.append(h)
+    numeric_cols = numeric_cols[:8]  # cap at 8 series
+
+    if not numeric_cols:
+        return {'has_data': False}
+
+    labels = []
+    for i, row in enumerate(rows[:20]):
+        lv = str(row.get(label_col, '')).strip()
+        labels.append(lv if lv and lv.lower() not in ('none', 'null', '') else f"Row {i + 1}")
+
+    datasets = {}
+    for col in numeric_cols:
+        datasets[col] = [_safe_float(row.get(col)) for row in rows[:20]]
+
+    n_periods = len(labels)
+
+    # Predictions for numeric series with >= 2 data points
+    prediction_labels = []
+    predictions = {}
+    if n_periods >= 2:
+        try:
+            years = [int(lbl) for lbl in labels]
+            last = max(years)
+            prediction_labels = [f"{last + 1} (proj.)", f"{last + 2} (proj.)"]
+        except (ValueError, TypeError):
+            prediction_labels = ["Next Period (proj.)", "Period +2 (proj.)"]
+        for col in numeric_cols:
+            preds = _predict_values(datasets[col], 2)
+            if preds:
+                predictions[col] = preds
+
+    # Recommended chart type
+    if n_periods >= 3:
+        recommended = 'line'
+    elif n_periods == 2:
+        recommended = 'bar'
+    elif len(numeric_cols) > 1:
+        recommended = 'doughnut'
+    else:
+        recommended = 'bar'
+
+    # Composition from last row
+    composition = {}
+    last_row = rows[n_periods - 1] if n_periods > 0 else {}
+    for col in numeric_cols:
+        v = _safe_float(last_row.get(col))
+        if v is not None:
+            composition[col] = v
+
+    # Scatter: first two numeric cols as x/y
+    scatter_data = []
+    if len(numeric_cols) >= 2:
+        for i in range(n_periods):
+            xv = datasets[numeric_cols[0]][i]
+            yv = datasets[numeric_cols[1]][i]
+            if xv is not None and yv is not None:
+                scatter_data.append({'x': xv, 'y': yv, 'label': labels[i]})
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'prediction_labels': prediction_labels,
+        'datasets': datasets,
+        'margins': {},
+        'ratios': {},
+        'predictions': predictions,
+        'recommended_chart_type': recommended,
+        'composition': composition,
+        'scatter_data': scatter_data,
+        'generic': True,
+        'x_label': numeric_cols[0] if len(numeric_cols) >= 1 else '',
+        'y_label': numeric_cols[1] if len(numeric_cols) >= 2 else '',
+    }
+
+
 def get_chart_data(rows, headers):
     if not rows or not headers:
         return {'has_data': False}
 
     col_mapping = _map_columns(headers)
     if not col_mapping:
-        return {'has_data': False}
+        return _get_generic_chart_data(rows, headers)
 
     has_financial = any(k in col_mapping for k in [
         'revenue', 'expenses', 'net_income', 'assets', 'liabilities', 'equity',
         'gross_profit', 'operating_income', 'cogs'
     ])
     if not has_financial:
-        return {'has_data': False}
+        return _get_generic_chart_data(rows, headers)
 
     has_year = 'year' in col_mapping
     labels = []
