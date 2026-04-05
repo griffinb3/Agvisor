@@ -225,22 +225,27 @@
             <button class="dashboard-close-btn" onclick="closeDashboard()"><i class="fas fa-times"></i></button>
         </div>
         <div class="dashboard-tabs">
-            <button class="dash-tab active" data-tab="performance"><i class="fas fa-chart-bar"></i> Performance</button>
-            <button class="dash-tab" data-tab="margins"><i class="fas fa-percent"></i> Margins</button>
-            <button class="dash-tab" data-tab="ratios"><i class="fas fa-balance-scale"></i> Ratios</button>
+            <button class="dash-tab active" data-tab="line"><i class="fas fa-chart-line"></i> Trend</button>
+            <button class="dash-tab" data-tab="bar"><i class="fas fa-chart-bar"></i> Compare</button>
+            <button class="dash-tab" data-tab="doughnut"><i class="fas fa-chart-pie"></i> Composition</button>
+            <button class="dash-tab" data-tab="scatter"><i class="fas fa-braille"></i> Margins</button>
         </div>
         <div class="dashboard-body">
-            <div class="dash-panel active" id="panel-performance">
-                <div class="chart-legend-note" id="perfNote"></div>
-                <div class="chart-wrap"><canvas id="chartPerformance"></canvas></div>
+            <div class="dash-panel active" id="panel-line">
+                <div class="chart-legend-note" id="lineNote"></div>
+                <div class="chart-wrap"><canvas id="chartLine"></canvas></div>
             </div>
-            <div class="dash-panel" id="panel-margins">
-                <div class="chart-legend-note">Profitability margins over time. Higher is better.</div>
-                <div class="chart-wrap"><canvas id="chartMargins"></canvas></div>
+            <div class="dash-panel" id="panel-bar">
+                <div class="chart-legend-note" id="barNote"></div>
+                <div class="chart-wrap"><canvas id="chartBar"></canvas></div>
             </div>
-            <div class="dash-panel" id="panel-ratios">
-                <div class="chart-legend-note">Key financial ratios from your most recent period.</div>
-                <div class="chart-wrap"><canvas id="chartRatios"></canvas></div>
+            <div class="dash-panel" id="panel-doughnut">
+                <div class="chart-legend-note">Revenue and cost composition for your latest period.</div>
+                <div class="chart-wrap"><canvas id="chartDoughnut"></canvas></div>
+            </div>
+            <div class="dash-panel" id="panel-scatter">
+                <div class="chart-legend-note">Revenue vs. net margin — shows whether growth is improving or pressuring profitability.</div>
+                <div class="chart-wrap"><canvas id="chartScatter"></canvas></div>
             </div>
         </div>
         <div class="dashboard-no-data" id="dashboardNoData" style="display:none;">
@@ -623,6 +628,7 @@
                 if (data.type === 'tabular') {
                     fileStatus.textContent = `Uploaded: ${data.row_count} records processed`;
                     setHasFinancialData(true);
+                    setTimeout(() => openDashboard(), 600);
                 } else {
                     let detail = data.summary || 'Document processed';
                     fileStatus.textContent = `Uploaded: ${detail}`;
@@ -1308,13 +1314,14 @@
             if (btn) btn.style.display = val ? 'flex' : 'none';
         }
 
-        async function openDashboard() {
+        async function openDashboard(preferredTab) {
             document.getElementById('dashboardOverlay').style.display = 'block';
             document.getElementById('dashboardModal').classList.add('open');
-            document.querySelector('.dash-tab[data-tab="performance"]').click();
             if (!dashboardDataCache) {
-                await loadChartData();
+                await loadChartData(preferredTab);
             } else {
+                const tab = preferredTab || dashboardDataCache.recommended_chart_type || 'line';
+                document.querySelector(`.dash-tab[data-tab="${tab}"]`).click();
                 renderCharts(dashboardDataCache);
             }
         }
@@ -1324,7 +1331,7 @@
             document.getElementById('dashboardModal').classList.remove('open');
         }
 
-        async function loadChartData() {
+        async function loadChartData(preferredTab) {
             try {
                 const resp = await fetch(`/api/charts?session_id=${sessionId}`);
                 const data = await resp.json();
@@ -1338,6 +1345,9 @@
                 noDataEl.style.display = 'none';
                 bodyEl.style.display = '';
                 dashboardDataCache = data;
+                const tab = preferredTab || data.recommended_chart_type || 'line';
+                const tabEl = document.querySelector(`.dash-tab[data-tab="${tab}"]`);
+                if (tabEl) tabEl.click();
                 renderCharts(data);
             } catch (err) {
                 console.error('Dashboard load error:', err);
@@ -1359,118 +1369,144 @@
             const GOLD = 'rgba(201,162,39,';
             const BLUE = 'rgba(52,152,219,';
             const RED = 'rgba(231,76,60,';
+            const PURPLE = 'rgba(155,89,182,';
 
             const predCount = (data.prediction_labels || []).length;
             const allLabels = [...data.labels, ...(data.prediction_labels || [])];
-
-            const perfNote = document.getElementById('perfNote');
-            if (perfNote) {
-                perfNote.textContent = predCount > 0
-                    ? `Historical data (${data.labels.join(', ')}) + ${predCount} projected period${predCount > 1 ? 's' : ''} (dashed lines).`
-                    : `Financial performance over ${data.labels.length} period${data.labels.length > 1 ? 's' : ''}.`;
-            }
 
             const subtitle = document.getElementById('dashboardSubtitle');
             if (subtitle && userProfile && userProfile.business_name) {
                 subtitle.textContent = '— ' + userProfile.business_name;
             }
 
-            function buildDataset(key, label, colorBase, type) {
+            const commonTooltipMoney = { callbacks: { label: ctx => ctx.dataset.label + ': ' + (fmtMoney(ctx.raw) || ctx.raw) } };
+            const commonLegend = { position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 12 } } };
+
+            function buildTimeSeries(key, label, colorBase, chartType) {
                 if (!data.datasets[key]) return null;
                 const actual = data.datasets[key];
                 const preds = (data.predictions && data.predictions[key]) || [];
                 const allVals = [...actual, ...preds];
                 const cutoff = actual.length - 1;
                 return {
-                    label,
-                    data: allVals,
-                    backgroundColor: allVals.map((_, i) => i <= cutoff ? colorBase + '0.75)' : colorBase + '0.35)'),
-                    borderColor: colorBase + '1)',
-                    borderWidth: 2,
-                    type,
-                    fill: false,
-                    tension: 0.3,
-                    segment: {
-                        borderDash: (ctx) => ctx.p0DataIndex >= cutoff ? [6, 4] : []
-                    },
-                    pointRadius: allVals.map((_, i) => i > cutoff ? 4 : 3),
+                    label, data: allVals, type: chartType,
+                    backgroundColor: allVals.map((_, i) => i <= cutoff ? colorBase + '0.7)' : colorBase + '0.3)'),
+                    borderColor: colorBase + '1)', borderWidth: 2, fill: false, tension: 0.35,
+                    segment: { borderDash: ctx => ctx.p0DataIndex >= cutoff ? [6, 4] : [] },
+                    pointRadius: allVals.map((_, i) => i > cutoff ? 5 : 3),
                     pointStyle: allVals.map((_, i) => i > cutoff ? 'triangle' : 'circle')
                 };
             }
 
-            const perfCtx = document.getElementById('chartPerformance');
-            if (perfCtx) {
+            // 1. LINE CHART — Trend over time with projections
+            const lineNote = document.getElementById('lineNote');
+            if (lineNote) {
+                lineNote.textContent = predCount > 0
+                    ? `Historical data (${data.labels.join(', ')}) + ${predCount} projected period${predCount > 1 ? 's' : ''} shown as dashed lines.`
+                    : `Revenue, expenses, and net income over ${data.labels.length} period${data.labels.length > 1 ? 's' : ''}.`;
+            }
+            const lineCtx = document.getElementById('chartLine');
+            if (lineCtx) {
                 const datasets = [
-                    buildDataset('revenue', 'Revenue', GREEN, 'bar'),
-                    buildDataset('expenses', 'Expenses', GOLD, 'bar'),
-                    buildDataset('net_income', 'Net Income', BLUE, 'line'),
+                    buildTimeSeries('revenue', 'Revenue', GREEN, 'line'),
+                    buildTimeSeries('expenses', 'Expenses', GOLD, 'line'),
+                    buildTimeSeries('net_income', 'Net Income', BLUE, 'line'),
                 ].filter(Boolean);
-                dashboardCharts.performance = new Chart(perfCtx, {
+                dashboardCharts.line = new Chart(lineCtx, {
+                    type: 'line',
+                    data: { labels: allLabels, datasets },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: {
+                            y: { ticks: { callback: v => fmtMoney(v) }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                            x: { grid: { display: false } }
+                        },
+                        plugins: { legend: commonLegend, tooltip: commonTooltipMoney }
+                    }
+                });
+            }
+
+            // 2. BAR CHART — Period-by-period grouped comparison with projections
+            const barNote = document.getElementById('barNote');
+            if (barNote) {
+                barNote.textContent = predCount > 0
+                    ? `Grouped comparison across periods. Lighter bars are projections.`
+                    : `Revenue, expenses, and net income compared across ${data.labels.length} period${data.labels.length > 1 ? 's' : ''}.`;
+            }
+            const barCtx = document.getElementById('chartBar');
+            if (barCtx) {
+                const datasets = [
+                    buildTimeSeries('revenue', 'Revenue', GREEN, 'bar'),
+                    buildTimeSeries('expenses', 'Expenses', GOLD, 'bar'),
+                    buildTimeSeries('net_income', 'Net Income', BLUE, 'bar'),
+                ].filter(Boolean);
+                dashboardCharts.bar = new Chart(barCtx, {
                     type: 'bar',
                     data: { labels: allLabels, datasets },
                     options: {
                         responsive: true, maintainAspectRatio: false,
                         scales: {
-                            y: { ticks: { callback: v => fmtMoney(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
+                            y: { ticks: { callback: v => fmtMoney(v) }, grid: { color: 'rgba(0,0,0,0.05)' } },
                             x: { grid: { display: false } }
                         },
+                        plugins: { legend: commonLegend, tooltip: commonTooltipMoney }
+                    }
+                });
+            }
+
+            // 3. DOUGHNUT CHART — Latest period composition
+            const doughnutCtx = document.getElementById('chartDoughnut');
+            const comp = data.composition || {};
+            const compKeys = Object.keys(comp);
+            if (doughnutCtx && compKeys.length > 0) {
+                const labelMap = { revenue: 'Revenue', expenses: 'Expenses', net_income: 'Net Income', gross_profit: 'Gross Profit', cogs: 'Cost of Goods' };
+                const palette = [GREEN + '0.8)', GOLD + '0.8)', BLUE + '0.7)', RED + '0.7)', PURPLE + '0.7)'];
+                const dLabels = compKeys.map(k => labelMap[k] || k);
+                const dVals = compKeys.map(k => Math.abs(comp[k]));
+                const dColors = compKeys.map((_, i) => palette[i % palette.length]);
+                dashboardCharts.doughnut = new Chart(doughnutCtx, {
+                    type: 'doughnut',
+                    data: { labels: dLabels, datasets: [{ data: dVals, backgroundColor: dColors, borderWidth: 2, borderColor: '#fff', hoverOffset: 8 }] },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
                         plugins: {
-                            legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } },
-                            tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + (fmtMoney(ctx.raw) || ctx.raw) } }
+                            legend: commonLegend,
+                            tooltip: { callbacks: { label: ctx => ctx.label + ': ' + (fmtMoney(ctx.raw) || ctx.raw) } }
                         }
                     }
                 });
             }
 
-            const marginsCtx = document.getElementById('chartMargins');
-            if (marginsCtx && Object.keys(data.margins).length > 0) {
-                const palette = [GREEN, GOLD, BLUE];
-                const mDatasets = Object.entries(data.margins).map(([key, vals], i) => {
-                    const c = palette[i % palette.length];
-                    return {
-                        label: key.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase()),
-                        data: vals,
-                        borderColor: c + '1)',
-                        backgroundColor: c + '0.1)',
-                        fill: true, tension: 0.3, borderWidth: 2,
-                        pointRadius: 4
-                    };
-                });
-                dashboardCharts.margins = new Chart(marginsCtx, {
-                    type: 'line',
-                    data: { labels: data.labels, datasets: mDatasets },
+            // 4. SCATTER CHART — Revenue vs. Net Margin
+            const scatterCtx = document.getElementById('chartScatter');
+            const scatterPts = data.scatter_data || [];
+            if (scatterCtx && scatterPts.length > 0) {
+                dashboardCharts.scatter = new Chart(scatterCtx, {
+                    type: 'scatter',
+                    data: {
+                        datasets: [{
+                            label: 'Revenue vs Net Margin',
+                            data: scatterPts.map(p => ({ x: p.x, y: p.y })),
+                            backgroundColor: GREEN + '0.7)',
+                            borderColor: GREEN + '1)',
+                            pointRadius: 7, pointHoverRadius: 9
+                        }]
+                    },
                     options: {
                         responsive: true, maintainAspectRatio: false,
                         scales: {
-                            y: { ticks: { callback: v => v + '%' }, grid: { color: 'rgba(0,0,0,0.06)' } },
-                            x: { grid: { display: false } }
+                            x: { title: { display: true, text: 'Revenue' }, ticks: { callback: v => fmtMoney(v) }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                            y: { title: { display: true, text: 'Net Margin (%)' }, ticks: { callback: v => v + '%' }, grid: { color: 'rgba(0,0,0,0.05)' } }
                         },
-                        plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } } }
-                    }
-                });
-            }
-
-            const ratiosCtx = document.getElementById('chartRatios');
-            if (ratiosCtx && Object.keys(data.ratios).length > 0) {
-                const rLabels = [], rVals = [], rColors = [];
-                const rPalette = [GREEN + '0.8)', GOLD + '0.8)', BLUE + '0.8)', RED + '0.8)'];
-                let ci = 0;
-                for (const [key, vals] of Object.entries(data.ratios)) {
-                    const clean = vals.filter(v => v != null);
-                    if (clean.length > 0) {
-                        rLabels.push(key.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase()));
-                        rVals.push(+clean[clean.length - 1].toFixed(2));
-                        rColors.push(rPalette[ci++ % rPalette.length]);
-                    }
-                }
-                dashboardCharts.ratios = new Chart(ratiosCtx, {
-                    type: 'bar',
-                    data: { labels: rLabels, datasets: [{ label: 'Latest Period', data: rVals, backgroundColor: rColors, borderWidth: 0, borderRadius: 4 }] },
-                    options: {
-                        responsive: true, maintainAspectRatio: false,
-                        indexAxis: 'y',
-                        scales: { x: { grid: { color: 'rgba(0,0,0,0.06)' } }, y: { grid: { display: false } } },
-                        plugins: { legend: { display: false } }
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: {
+                                label: ctx => {
+                                    const pt = scatterPts[ctx.dataIndex];
+                                    return `${pt ? pt.label : ''}: Rev ${fmtMoney(ctx.parsed.x)}, Margin ${ctx.parsed.y}%`;
+                                }
+                            }}
+                        }
                     }
                 });
             }

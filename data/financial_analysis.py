@@ -420,6 +420,37 @@ def get_chart_data(rows, headers):
     if not labels:
         return {'has_data': False}
 
+    # Recommended chart type selection
+    n_periods = len(labels)
+    has_time_series = any(k in datasets for k in ['revenue', 'expenses', 'net_income'])
+    if has_time_series and n_periods >= 3:
+        recommended_chart_type = 'line'
+    elif has_time_series and n_periods == 2:
+        recommended_chart_type = 'bar'
+    elif has_time_series and n_periods == 1:
+        recommended_chart_type = 'doughnut'
+    elif margins:
+        recommended_chart_type = 'scatter'
+    else:
+        recommended_chart_type = 'bar'
+
+    # Doughnut: latest period composition
+    latest = rows[n_periods - 1] if n_periods > 0 else {}
+    composition = {}
+    for key in ['revenue', 'expenses', 'net_income', 'gross_profit', 'cogs']:
+        if key in col_mapping:
+            val = _get_val(latest, col_mapping, key)
+            if val is not None:
+                composition[key] = val
+
+    # Scatter: revenue vs net_margin pairs
+    scatter_data = []
+    for i in range(n_periods):
+        rev = datasets.get('revenue', [None] * n_periods)[i]
+        nm = margins.get('net_margin', [None] * n_periods)[i]
+        if rev is not None and nm is not None:
+            scatter_data.append({'x': rev, 'y': nm, 'label': labels[i]})
+
     return {
         'has_data': True,
         'labels': labels,
@@ -427,5 +458,8 @@ def get_chart_data(rows, headers):
         'datasets': datasets,
         'margins': margins,
         'ratios': ratios,
-        'predictions': predictions
+        'predictions': predictions,
+        'recommended_chart_type': recommended_chart_type,
+        'composition': composition,
+        'scatter_data': scatter_data
     }

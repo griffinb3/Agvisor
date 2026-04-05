@@ -147,7 +147,7 @@ class BaseAdvisor:
             base += "\n\nCONVERSATIONAL STYLE: Be direct, warm, and advisory — like a trusted one-on-one advisor. You are speaking directly with this user, so be personal and engaged."
             if has_financial:
                 base += " The user has uploaded financial records — reference their specific numbers and trends where relevant to your domain."
-            base += "\n\nRESPONSE FORMAT: Write exactly ONE concise paragraph of expert advice. No numbered lists, no bullet points, no headers. Be specific, focused, and tight. If you have an exploratory question, place it on a new line starting with '❓' — phrased as something to reflect on or something you find yourself wondering about, not a direct question that demands an immediate reply. This keeps the dialogue open without pressuring the user. If you have nothing genuinely useful to ask, omit the ❓ line entirely."
+            base += "\n\nRESPONSE FORMAT: Write exactly ONE concise paragraph of expert advice. No numbered lists, no bullet points, no headers. Be specific, focused, and tight. If one specific piece of information would meaningfully sharpen your next response, add it on a new line starting with '❓' as a direct, focused question. Only ask if genuinely useful — if you have nothing worth asking, omit the ❓ line entirely."
         else:
             base += "\n\nCONVERSATIONAL STYLE: Be direct, warm, and advisory — like a trusted expert contributing to a board discussion. Speak from your specific area of expertise only."
             if has_financial:
