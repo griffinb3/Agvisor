@@ -907,14 +907,8 @@
             containerDiv.className = 'advisor-responses-container direct-mode-response';
             const responseDiv = document.createElement('div');
             responseDiv.className = 'board-summary board-summary-solo';
-            responseDiv.innerHTML = `
-                <div class="board-summary-header">
-                    <i class="fas fa-${advisorIcon}"></i>
-                    <span>${escapeHtml(advisorTitle)}</span>
-                    <span class="board-consulted">Direct</span>
-                </div>
-                <div class="board-summary-content">${formatMessage(data.response)}</div>
-            `;
+            const headerHtml = `<i class="fas fa-${advisorIcon}"></i><span>${escapeHtml(advisorTitle)}</span><span class="board-consulted">Direct</span>`;
+            renderResponseBubble(responseDiv, headerHtml, data.response, null);
             containerDiv.appendChild(responseDiv);
             checkAndAppendDashboard(data.response, containerDiv);
             chatMessages.appendChild(containerDiv);
@@ -955,19 +949,9 @@
             const summaryId = 'summary_' + Date.now();
             const summaryDiv = document.createElement('div');
             summaryDiv.className = 'board-summary board-summary-solo';
-            summaryDiv.innerHTML = `
-                <div class="board-summary-header">
-                    <i class="fas fa-users"></i>
-                    <span>Board Response</span>
-                    ${advisorNames.length ? `<span class="board-consulted">via ${escapeHtml(advisorNames.join(', '))}</span>` : ''}
-                </div>
-                <div class="board-summary-content">${formatMessage(summaryText)}</div>
-                <div class="board-summary-actions">
-                    <button class="save-plan-btn" data-summary-id="${summaryId}" onclick="saveAsPlan(this)">
-                        <i class="fas fa-save"></i> Save as Action Plan
-                    </button>
-                </div>
-            `;
+            const boardHeaderHtml = `<i class="fas fa-users"></i><span>Board Response</span>${advisorNames.length ? `<span class="board-consulted">via ${escapeHtml(advisorNames.join(', '))}</span>` : ''}`;
+            const boardFooterHtml = `<div class="board-summary-actions"><button class="save-plan-btn" data-summary-id="${summaryId}" onclick="saveAsPlan(this)"><i class="fas fa-save"></i> Save as Action Plan</button></div>`;
+            renderResponseBubble(summaryDiv, boardHeaderHtml, summaryText, boardFooterHtml);
             summaryDiv.dataset.summaryText = summaryText;
             summaryDiv.dataset.responses = JSON.stringify(data.responses || []);
             summaryDiv.id = summaryId;
@@ -1018,12 +1002,35 @@
         }
 
         function formatMessage(text) {
-            let cleaned = text.replace(/^❓\s*/gm, '');
-            let formatted = escapeHtml(cleaned);
+            let formatted = escapeHtml(text);
             formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
             formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
             formatted = formatted.replace(/\n/g, '<br>');
             return formatted;
+        }
+
+        function splitAdviceAndQuestion(text) {
+            const lines = text.split('\n');
+            const qIndex = lines.findIndex(l => l.trim().startsWith('❓'));
+            if (qIndex === -1) return { advice: text.trim(), question: null };
+            const advice = lines.slice(0, qIndex).join('\n').trim();
+            const question = lines.slice(qIndex).join('\n').replace(/^❓\s*/gm, '').trim();
+            return { advice, question };
+        }
+
+        function renderResponseBubble(container, headerHtml, text, extraFooterHtml) {
+            const { advice, question } = splitAdviceAndQuestion(text);
+            let html = `
+                <div class="board-summary-header">${headerHtml}</div>
+                <div class="board-summary-content">${formatMessage(advice)}</div>
+            `;
+            if (question) {
+                html += `<div class="response-question"><i class="fas fa-comment-dots"></i><span>${formatMessage(question)}</span></div>`;
+            }
+            if (extraFooterHtml) {
+                html += extraFooterHtml;
+            }
+            container.innerHTML = html;
         }
 
         const actionPlansBtn = document.getElementById('actionPlansBtn');
