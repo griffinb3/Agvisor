@@ -175,10 +175,10 @@ def detect_specific_advisor(message, active_advisors):
     return None
 
 
-def get_advisor_response(advisor_id, message, session_id, user_profile):
+def get_advisor_response(advisor_id, message, session_id, user_profile, direct_mode=False):
     advisor_class = ADVISOR_CLASSES.get(advisor_id)
     if advisor_class:
-        return advisor_class.get_response(message, session_id, user_profile, conversation_histories)
+        return advisor_class.get_response(message, session_id, user_profile, conversation_histories, direct_mode=direct_mode)
     return {
         'advisor_id': advisor_id,
         'response': "Advisor not found.",
@@ -296,7 +296,7 @@ def chat():
         return jsonify({'error': 'No message provided'}), 400
 
     user_profile = user_profiles.get(session_id)
-    result = get_advisor_response(advisor_id, message, session_id, user_profile)
+    result = get_advisor_response(advisor_id, message, session_id, user_profile, direct_mode=True)
 
     if 'Error' in result.get('response', ''):
         return jsonify({'error': result['response']}), 500

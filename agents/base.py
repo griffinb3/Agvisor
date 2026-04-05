@@ -50,7 +50,7 @@ class BaseAdvisor:
         }
 
     @classmethod
-    def build_system_prompt(cls, user_profile=None):
+    def build_system_prompt(cls, user_profile=None, direct_mode=False):
         base = cls.system_prompt
 
         if cls.training_data_file:
@@ -143,15 +143,21 @@ class BaseAdvisor:
             base += context
 
         has_financial = bool(user_profile and user_profile.get('financial_analysis'))
-        base += "\n\nCONVERSATIONAL STYLE: Be direct, warm, and advisory — like a trusted expert contributing to a board discussion. Speak from your specific area of expertise only."
-        if has_financial:
-            base += " The user has uploaded financial records — reference their specific numbers and trends where relevant to your domain."
-        base += "\n\nRESPONSE FORMAT: Write exactly ONE concise paragraph from your expert perspective. No numbered lists, no bullet points, no headers, no follow-up questions. Be specific, focused, and tight. The Board Chair will synthesize all perspectives and handle any follow-up with the user."
+        if direct_mode:
+            base += "\n\nCONVERSATIONAL STYLE: Be direct, warm, and advisory — like a trusted one-on-one advisor. You are speaking directly with this user, so be personal and engaged."
+            if has_financial:
+                base += " The user has uploaded financial records — reference their specific numbers and trends where relevant to your domain."
+            base += "\n\nRESPONSE FORMAT: Write exactly ONE concise paragraph of expert advice. No numbered lists, no bullet points, no headers. Be specific, focused, and tight. You may end your response with ONE conversational, exploratory question — phrased as something to reflect on or something you find yourself wondering about, not a direct question that demands an immediate reply. This keeps the dialogue open without pressuring the user."
+        else:
+            base += "\n\nCONVERSATIONAL STYLE: Be direct, warm, and advisory — like a trusted expert contributing to a board discussion. Speak from your specific area of expertise only."
+            if has_financial:
+                base += " The user has uploaded financial records — reference their specific numbers and trends where relevant to your domain."
+            base += "\n\nRESPONSE FORMAT: Write exactly ONE concise paragraph from your expert perspective. No numbered lists, no bullet points, no headers, no follow-up questions. Be specific, focused, and tight. The Board Chair will synthesize all perspectives and handle any follow-up with the user."
 
         return base
 
     @classmethod
-    def get_response(cls, message, session_id, user_profile, conversation_histories):
+    def get_response(cls, message, session_id, user_profile, conversation_histories, direct_mode=False):
         client = get_openai_client()
         advisor_id = cls.get_advisor_id()
 
@@ -159,7 +165,7 @@ class BaseAdvisor:
         if history_key not in conversation_histories:
             conversation_histories[history_key] = []
 
-        system_prompt = cls.build_system_prompt(user_profile)
+        system_prompt = cls.build_system_prompt(user_profile, direct_mode=direct_mode)
 
         rag_context = None
         try:

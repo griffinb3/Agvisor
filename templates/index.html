@@ -901,17 +901,19 @@
 
         function addDirectResponse(data, advisorId) {
             const advisor = allAdvisors[advisorId] || {};
+            const advisorTitle = data.advisor ? data.advisor.title : (advisor.title || 'Advisor');
+            const advisorIcon = advisor.icon || 'user';
             const containerDiv = document.createElement('div');
             containerDiv.className = 'advisor-responses-container direct-mode-response';
             const responseDiv = document.createElement('div');
-            responseDiv.className = 'advisor-response';
+            responseDiv.className = 'board-summary board-summary-solo';
             responseDiv.innerHTML = `
-                <div class="advisor-response-header">
-                    <i class="fas fa-${advisor.icon || 'user'}"></i>
-                    <span class="advisor-title">${data.advisor ? data.advisor.title : (advisor.title || '')}</span>
-                    <span class="direct-mode-tag"><i class="fas fa-user"></i> Direct</span>
+                <div class="board-summary-header">
+                    <i class="fas fa-${advisorIcon}"></i>
+                    <span>${escapeHtml(advisorTitle)}</span>
+                    <span class="board-consulted">Direct</span>
                 </div>
-                <div class="advisor-response-content">${formatMessage(data.response)}</div>
+                <div class="board-summary-content">${formatMessage(data.response)}</div>
             `;
             containerDiv.appendChild(responseDiv);
             checkAndAppendDashboard(data.response, containerDiv);
