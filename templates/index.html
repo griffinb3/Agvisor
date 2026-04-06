@@ -1064,6 +1064,7 @@
         let currentPlansView = 'list';
         let calYear = new Date().getFullYear();
         let calMonth = new Date().getMonth();
+        let calAutoNavigated = false;
 
         document.getElementById('plansViewTabs').addEventListener('click', e => {
             const tab = e.target.closest('.plans-view-tab');
@@ -1295,6 +1296,21 @@
                 });
             });
 
+            const scheduledItems = allItems.filter(i => i.due_date);
+            if (!calAutoNavigated && scheduledItems.length > 0) {
+                calAutoNavigated = true;
+                const currentMonthHasItems = scheduledItems.some(i => {
+                    const [y, m] = i.due_date.split('T')[0].split('-').map(Number);
+                    return y === calYear && m - 1 === calMonth;
+                });
+                if (!currentMonthHasItems) {
+                    const earliest = scheduledItems.map(i => i.due_date.split('T')[0]).sort()[0];
+                    const [ey, em] = earliest.split('-').map(Number);
+                    calYear = ey;
+                    calMonth = em - 1;
+                }
+            }
+
             const year = calYear;
             const month = calMonth;
             const monthName = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -1357,12 +1373,21 @@
                 `;
             }
 
+            const totalScheduled = scheduledItems.length;
+            const thisMonthCount = Object.values(itemsByDate).flat().length;
+            const otherMonths = totalScheduled - thisMonthCount;
+
             plansCalendarView.innerHTML = `
+                <div class="cal-suggested-banner">
+                    <i class="fas fa-magic"></i>
+                    Dates suggested by the board based on task urgency and time to complete. You can change any date by clicking it.
+                </div>
                 <div class="cal-nav">
                     <button class="cal-nav-btn" onclick="calNavMonth(-1)"><i class="fas fa-chevron-left"></i></button>
                     <span class="cal-month-title">${monthName}</span>
                     <button class="cal-nav-btn" onclick="calNavMonth(1)"><i class="fas fa-chevron-right"></i></button>
                 </div>
+                ${thisMonthCount === 0 && otherMonths > 0 ? `<div class="cal-empty-month"><i class="fas fa-calendar"></i> No tasks this month — use the arrows to find ${otherMonths} task${otherMonths > 1 ? 's' : ''} in other months.</div>` : ''}
                 <div class="cal-grid">
                     ${dayNames.map(n => `<div class="cal-day-name">${n}</div>`).join('')}
                     ${calCells}

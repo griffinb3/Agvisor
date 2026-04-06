@@ -1,7 +1,7 @@
 import re
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, jsonify, session
 import os
@@ -538,6 +538,24 @@ def extract_prose_action_items(text, advisor_source=None):
     return items
 
 
+ESTIMATE_DAYS = {
+    '1–2 days':  2,
+    '3–5 days':  5,
+    '1–2 weeks': 14,
+    '2–4 weeks': 28,
+    '1–3 months': 45,
+}
+PRIORITY_OFFSET = {'high': 0, 'medium': 3, 'low': 7}
+
+
+def suggest_due_date(time_estimate, priority='medium', stagger=0):
+    """Return a suggested due date based on time estimate, priority, and position."""
+    base = ESTIMATE_DAYS.get(time_estimate, 14)
+    p_off = PRIORITY_OFFSET.get(priority, 0)
+    total = base + p_off + (stagger * 2)
+    return (date.today() + timedelta(days=total)).isoformat()
+
+
 def _get_session_id():
     if 'session_id' not in session:
         session['session_id'] = os.urandom(16).hex()
@@ -587,16 +605,22 @@ def create_plan():
             plan_created_at = plan_row[1]
 
             created_items = []
+            priority_stagger = {'high': 0, 'medium': 0, 'low': 0}
             for item in items:
                 desc = item.get('description', '')
+                priority = item.get('priority', 'medium')
                 te = item.get('time_estimate') or estimate_time(desc)
+                due_date = item.get('due_date') or suggest_due_date(
+                    te, priority, priority_stagger.get(priority, 0)
+                )
+                priority_stagger[priority] = priority_stagger.get(priority, 0) + 1
                 cur.execute(
                     """INSERT INTO action_items (plan_id, description, advisor_source, priority, due_date, notes, time_estimate)
                        VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id, created_at""",
                     (plan_id, desc,
                      item.get('advisor_source', advisor_source),
-                     item.get('priority', 'medium'),
-                     item.get('due_date', None),
+                     priority,
+                     due_date,
                      item.get('notes', None),
                      te)
                 )
@@ -605,9 +629,9 @@ def create_plan():
                     'id': item_row[0],
                     'description': desc,
                     'advisor_source': item.get('advisor_source', advisor_source),
-                    'priority': item.get('priority', 'medium'),
+                    'priority': priority,
                     'status': 'pending',
-                    'due_date': item.get('due_date', None),
+                    'due_date': due_date,
                     'notes': item.get('notes', None),
                     'time_estimate': te,
                     'created_at': item_row[1].isoformat()
