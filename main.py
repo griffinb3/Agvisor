@@ -442,6 +442,21 @@ def get_db_connection():
     return psycopg2.connect(os.environ["DATABASE_URL"])
 
 
+def estimate_time(desc):
+    lower = desc.lower()
+    if any(w in lower for w in ['hire', 'launch', 'expand', 'certify', 'train', 'construct', 'build']):
+        return '1–3 months'
+    if any(w in lower for w in ['plan', 'budget', 'monitor', 'track', 'evaluate', 'assess', 'develop strategy']):
+        return '2–4 weeks'
+    if any(w in lower for w in ['implement', 'set up', 'create', 'prepare', 'install', 'configure', 'establish', 'update']):
+        return '1–2 weeks'
+    if any(w in lower for w in ['contact', 'call', 'schedule', 'apply', 'submit', 'register', 'sign up', 'enroll']):
+        return '3–5 days'
+    if any(w in lower for w in ['review', 'check', 'read', 'research', 'verify', 'confirm', 'look into', 'explore']):
+        return '1–2 days'
+    return '1–2 weeks'
+
+
 def extract_action_items(text, advisor_source=None):
     items = []
     lines = text.strip().split('\n')
@@ -460,7 +475,8 @@ def extract_action_items(text, advisor_source=None):
                 items.append({
                     'description': desc,
                     'advisor_source': advisor_source,
-                    'priority': priority
+                    'priority': priority,
+                    'time_estimate': estimate_time(desc)
                 })
     return items
 
@@ -499,24 +515,28 @@ def create_plan():
 
             created_items = []
             for item in items:
+                desc = item.get('description', '')
+                te = item.get('time_estimate') or estimate_time(desc)
                 cur.execute(
-                    """INSERT INTO action_items (plan_id, description, advisor_source, priority, due_date, notes)
-                       VALUES (%s, %s, %s, %s, %s, %s) RETURNING id, created_at""",
-                    (plan_id, item.get('description', ''),
+                    """INSERT INTO action_items (plan_id, description, advisor_source, priority, due_date, notes, time_estimate)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id, created_at""",
+                    (plan_id, desc,
                      item.get('advisor_source', advisor_source),
                      item.get('priority', 'medium'),
                      item.get('due_date', None),
-                     item.get('notes', None))
+                     item.get('notes', None),
+                     te)
                 )
                 item_row = cur.fetchone()
                 created_items.append({
                     'id': item_row[0],
-                    'description': item.get('description', ''),
+                    'description': desc,
                     'advisor_source': item.get('advisor_source', advisor_source),
                     'priority': item.get('priority', 'medium'),
                     'status': 'pending',
                     'due_date': item.get('due_date', None),
                     'notes': item.get('notes', None),
+                    'time_estimate': te,
                     'created_at': item_row[1].isoformat()
                 })
         conn.commit()
@@ -586,7 +606,7 @@ def update_plan_item(plan_id, item_id):
 
             updates = []
             values = []
-            allowed_fields = ['status', 'priority', 'notes', 'due_date', 'description']
+            allowed_fields = ['status', 'priority', 'notes', 'due_date', 'description', 'time_estimate']
             for field in allowed_fields:
                 if field in data:
                     updates.append(f"{field} = %s")

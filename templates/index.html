@@ -261,6 +261,11 @@
             <h2><i class="fas fa-tasks"></i> Action Plans</h2>
             <button class="plans-close-btn" id="closePlansBtn"><i class="fas fa-times"></i></button>
         </div>
+        <div class="plans-view-tabs" id="plansViewTabs">
+            <button class="plans-view-tab active" data-view="list"><i class="fas fa-list-ul"></i> List</button>
+            <button class="plans-view-tab" data-view="priority"><i class="fas fa-fire"></i> Priority</button>
+            <button class="plans-view-tab" data-view="calendar"><i class="fas fa-calendar-alt"></i> Calendar</button>
+        </div>
         <div class="plans-panel-body" id="plansPanelBody">
             <div class="plans-empty" id="plansEmpty">
                 <i class="fas fa-clipboard-list"></i>
@@ -268,6 +273,8 @@
                 <span>Save advisor recommendations as action plans to track your progress</span>
             </div>
             <div class="plans-list" id="plansList"></div>
+            <div class="plans-priority-view" id="plansPriorityView" style="display:none"></div>
+            <div class="plans-calendar-view" id="plansCalendarView" style="display:none"></div>
         </div>
     </div>
 
@@ -1051,6 +1058,21 @@
         const plansBadge = document.getElementById('plansBadge');
         const plansList = document.getElementById('plansList');
         const plansEmpty = document.getElementById('plansEmpty');
+        const plansPriorityView = document.getElementById('plansPriorityView');
+        const plansCalendarView = document.getElementById('plansCalendarView');
+
+        let currentPlansView = 'list';
+        let calYear = new Date().getFullYear();
+        let calMonth = new Date().getMonth();
+
+        document.getElementById('plansViewTabs').addEventListener('click', e => {
+            const tab = e.target.closest('.plans-view-tab');
+            if (!tab) return;
+            currentPlansView = tab.dataset.view;
+            document.querySelectorAll('.plans-view-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            renderPlansView();
+        });
 
         function openPlansPanel() {
             actionPlansPanel.classList.add('open');
@@ -1072,7 +1094,7 @@
                 const response = await fetch('/api/plans');
                 actionPlans = await response.json();
                 if (Array.isArray(actionPlans)) {
-                    renderPlans();
+                    renderPlansView();
                     updatePlansBadge();
                 }
             } catch (err) {
@@ -1090,16 +1112,76 @@
             }
         }
 
-        function renderPlans() {
+        function renderPlansView() {
+            plansList.style.display = 'none';
+            plansPriorityView.style.display = 'none';
+            plansCalendarView.style.display = 'none';
+
             const activePlans = actionPlans.filter(p => p.status !== 'archived');
-            if (activePlans.length === 0) {
+            const hasItems = activePlans.some(p => (p.items || []).length > 0);
+
+            if (activePlans.length === 0 || !hasItems) {
                 plansEmpty.style.display = 'flex';
-                plansList.innerHTML = '';
                 return;
             }
             plansEmpty.style.display = 'none';
-            plansList.innerHTML = '';
 
+            if (currentPlansView === 'list') {
+                plansList.style.display = 'block';
+                renderListView(activePlans);
+            } else if (currentPlansView === 'priority') {
+                plansPriorityView.style.display = 'block';
+                renderPriorityView(activePlans);
+            } else if (currentPlansView === 'calendar') {
+                plansCalendarView.style.display = 'block';
+                renderCalendarView(activePlans);
+            }
+        }
+
+        function buildItemHtml(item, planId, opts = {}) {
+            const isCompleted = item.status === 'completed';
+            const isInProgress = item.status === 'in_progress';
+            const priorityClass = `priority-${item.priority || 'medium'}`;
+            const advisorLabel = item.advisor_source ? getAdvisorTitle(item.advisor_source) : '';
+            const te = item.time_estimate || '';
+            const dueDateVal = item.due_date ? item.due_date.split('T')[0] : '';
+
+            return `
+                <div class="plan-item ${isCompleted ? 'item-completed' : ''}" data-item-id="${item.id}">
+                    <div class="plan-item-main">
+                        <button class="plan-item-check ${isCompleted ? 'checked' : ''}"
+                            onclick="toggleItemStatus(${planId}, ${item.id}, '${item.status}')">
+                            <i class="fas ${isCompleted ? 'fa-check-circle' : 'fa-circle'}"></i>
+                        </button>
+                        <div class="plan-item-content">
+                            <div class="plan-item-desc">${escapeHtml(item.description)}</div>
+                            <div class="plan-item-meta">
+                                ${advisorLabel ? `<span class="plan-item-advisor"><i class="fas fa-user-tie"></i> ${escapeHtml(advisorLabel)}</span>` : ''}
+                                <span class="plan-item-priority ${priorityClass}">${item.priority || 'medium'}</span>
+                                ${te ? `<span class="plan-time-est"><i class="fas fa-hourglass-half"></i> ${escapeHtml(te)}</span>` : ''}
+                                <button class="plan-item-status-btn ${isInProgress ? 'active' : ''}"
+                                    onclick="cycleItemStatus(${planId}, ${item.id}, '${item.status}')">
+                                    ${getStatusLabel(item.status)}
+                                </button>
+                            </div>
+                            <div class="plan-item-due-row">
+                                <label class="plan-due-label"><i class="fas fa-calendar-day"></i> Due:</label>
+                                <input type="date" class="plan-due-date" value="${dueDateVal}"
+                                    onchange="updateItemDueDate(${planId}, ${item.id}, this.value)"
+                                    title="Set a due date">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="plan-item-notes-section">
+                        <textarea class="plan-item-notes" placeholder="Add notes..."
+                            onchange="updateItemNotes(${planId}, ${item.id}, this.value)">${item.notes || ''}</textarea>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderListView(activePlans) {
+            plansList.innerHTML = '';
             activePlans.forEach(plan => {
                 const planEl = document.createElement('div');
                 planEl.className = 'plan-card';
@@ -1108,42 +1190,9 @@
                 const completedCount = (plan.items || []).filter(i => i.status === 'completed').length;
                 const totalCount = (plan.items || []).length;
                 const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
                 const createdDate = new Date(plan.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-                let itemsHtml = '';
-                (plan.items || []).forEach(item => {
-                    const isCompleted = item.status === 'completed';
-                    const isInProgress = item.status === 'in_progress';
-                    const priorityClass = `priority-${item.priority || 'medium'}`;
-                    const advisorLabel = item.advisor_source ? getAdvisorTitle(item.advisor_source) : '';
-
-                    itemsHtml += `
-                        <div class="plan-item ${isCompleted ? 'item-completed' : ''}" data-item-id="${item.id}">
-                            <div class="plan-item-main">
-                                <button class="plan-item-check ${isCompleted ? 'checked' : ''}" 
-                                    onclick="toggleItemStatus(${plan.id}, ${item.id}, '${item.status}')">
-                                    <i class="fas ${isCompleted ? 'fa-check-circle' : 'fa-circle'}"></i>
-                                </button>
-                                <div class="plan-item-content">
-                                    <div class="plan-item-desc">${escapeHtml(item.description)}</div>
-                                    <div class="plan-item-meta">
-                                        ${advisorLabel ? `<span class="plan-item-advisor"><i class="fas fa-user-tie"></i> ${escapeHtml(advisorLabel)}</span>` : ''}
-                                        <span class="plan-item-priority ${priorityClass}">${item.priority || 'medium'}</span>
-                                        <button class="plan-item-status-btn ${isInProgress ? 'active' : ''}" 
-                                            onclick="cycleItemStatus(${plan.id}, ${item.id}, '${item.status}')">
-                                            ${getStatusLabel(item.status)}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="plan-item-notes-section">
-                                <textarea class="plan-item-notes" placeholder="Add notes..." 
-                                    onchange="updateItemNotes(${plan.id}, ${item.id}, this.value)">${item.notes || ''}</textarea>
-                            </div>
-                        </div>
-                    `;
-                });
+                let itemsHtml = (plan.items || []).map(item => buildItemHtml(item, plan.id)).join('');
 
                 planEl.innerHTML = `
                     <div class="plan-card-header">
@@ -1166,6 +1215,171 @@
                 plansList.appendChild(planEl);
             });
         }
+
+        function renderPriorityView(activePlans) {
+            const allItems = [];
+            activePlans.forEach(plan => {
+                (plan.items || []).forEach(item => {
+                    if (item.status !== 'completed') {
+                        allItems.push({ ...item, planTitle: plan.title, planId: plan.id });
+                    }
+                });
+            });
+
+            const priorityOrder = { high: 0, medium: 1, low: 2 };
+            allItems.sort((a, b) => (priorityOrder[a.priority] ?? 1) - (priorityOrder[b.priority] ?? 1));
+
+            const groups = [
+                { key: 'high', label: 'Critical — Do These First', icon: 'fa-fire', color: '#dc3545', subtitle: 'Pivotal actions with the highest impact on your operation.' },
+                { key: 'medium', label: 'Standard Priority', icon: 'fa-star-half-alt', color: '#e6a817', subtitle: 'Important steps to keep momentum going.' },
+                { key: 'low', label: 'Optional / Long-term', icon: 'fa-leaf', color: '#3a9444', subtitle: 'Consider when higher priorities are under control.' }
+            ];
+
+            let html = `<div class="priority-view-intro"><i class="fas fa-info-circle"></i> Showing all incomplete items ranked by urgency across all your plans.</div>`;
+
+            groups.forEach(g => {
+                const groupItems = allItems.filter(i => (i.priority || 'medium') === g.key);
+                if (groupItems.length === 0) return;
+
+                html += `
+                    <div class="priority-group">
+                        <div class="priority-group-header" style="border-left-color:${g.color}">
+                            <span class="priority-group-icon" style="color:${g.color}"><i class="fas ${g.icon}"></i></span>
+                            <div>
+                                <div class="priority-group-title">${g.label}</div>
+                                <div class="priority-group-sub">${g.subtitle}</div>
+                            </div>
+                            <span class="priority-group-count" style="background:${g.color}">${groupItems.length}</span>
+                        </div>
+                        <div class="priority-group-items">
+                            ${groupItems.map((item, rank) => `
+                                <div class="priority-item ${item.status === 'in_progress' ? 'in-progress' : ''}">
+                                    <span class="priority-rank" style="color:${g.color}">#${rank + 1}</span>
+                                    <div class="priority-item-body">
+                                        <div class="priority-item-desc">${escapeHtml(item.description)}</div>
+                                        <div class="priority-item-meta">
+                                            <span class="plan-time-est"><i class="fas fa-hourglass-half"></i> ${escapeHtml(item.time_estimate || '1–2 weeks')}</span>
+                                            ${item.due_date ? `<span class="priority-due"><i class="fas fa-calendar-day"></i> Due ${formatDueDate(item.due_date)}</span>` : ''}
+                                            <span class="priority-plan-ref"><i class="fas fa-clipboard"></i> ${escapeHtml(item.planTitle)}</span>
+                                        </div>
+                                    </div>
+                                    <button class="priority-item-status-btn ${item.status === 'in_progress' ? 'active' : ''}"
+                                        onclick="cycleItemStatus(${item.planId}, ${item.id}, '${item.status}')">
+                                        ${getStatusLabel(item.status)}
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (allItems.length === 0) {
+                html = `<div class="plans-empty" style="display:flex"><i class="fas fa-check-circle"></i><p>All done!</p><span>No pending items. Nice work.</span></div>`;
+            }
+
+            plansPriorityView.innerHTML = html;
+        }
+
+        function formatDueDate(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr + 'T00:00:00');
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        function renderCalendarView(activePlans) {
+            const allItems = [];
+            activePlans.forEach(plan => {
+                (plan.items || []).forEach(item => {
+                    allItems.push({ ...item, planTitle: plan.title, planId: plan.id });
+                });
+            });
+
+            const year = calYear;
+            const month = calMonth;
+            const monthName = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const today = new Date();
+
+            const itemsByDate = {};
+            const unscheduled = [];
+            allItems.forEach(item => {
+                if (item.due_date) {
+                    const key = item.due_date.split('T')[0];
+                    const [y, m] = key.split('-').map(Number);
+                    if (y === year && m - 1 === month) {
+                        if (!itemsByDate[key]) itemsByDate[key] = [];
+                        itemsByDate[key].push(item);
+                    }
+                } else {
+                    unscheduled.push(item);
+                }
+            });
+
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            let calCells = '';
+            for (let i = 0; i < firstDay; i++) calCells += `<div class="cal-day cal-empty"></div>`;
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const dayItems = itemsByDate[dateKey] || [];
+                const isToday = d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                const isPast = new Date(year, month, d) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+                calCells += `
+                    <div class="cal-day ${dayItems.length ? 'has-items' : ''} ${isToday ? 'is-today' : ''} ${isPast && dayItems.some(i => i.status !== 'completed') ? 'is-overdue' : ''}">
+                        <span class="cal-day-num">${d}</span>
+                        ${dayItems.map(item => `
+                            <div class="cal-item-dot priority-${item.priority || 'medium'}" title="${escapeHtml(item.description)}">
+                                <i class="fas ${item.status === 'completed' ? 'fa-check-circle' : 'fa-circle'}"></i>
+                                <span class="cal-item-label">${escapeHtml(item.description.length > 22 ? item.description.slice(0, 22) + '…' : item.description)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            let unschHtml = '';
+            if (unscheduled.length > 0) {
+                unschHtml = `
+                    <div class="cal-unscheduled">
+                        <div class="cal-unsch-header"><i class="fas fa-calendar-times"></i> Not Yet Scheduled</div>
+                        ${unscheduled.map(item => `
+                            <div class="cal-unsch-item">
+                                <span class="plan-item-priority priority-${item.priority || 'medium'}">${item.priority || 'medium'}</span>
+                                <span class="cal-unsch-desc">${escapeHtml(item.description)}</span>
+                                <input type="date" class="plan-due-date cal-date-pick" placeholder="Set date"
+                                    onchange="updateItemDueDate(${item.planId}, ${item.id}, this.value)"
+                                    title="Assign a due date">
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            plansCalendarView.innerHTML = `
+                <div class="cal-nav">
+                    <button class="cal-nav-btn" onclick="calNavMonth(-1)"><i class="fas fa-chevron-left"></i></button>
+                    <span class="cal-month-title">${monthName}</span>
+                    <button class="cal-nav-btn" onclick="calNavMonth(1)"><i class="fas fa-chevron-right"></i></button>
+                </div>
+                <div class="cal-grid">
+                    ${dayNames.map(n => `<div class="cal-day-name">${n}</div>`).join('')}
+                    ${calCells}
+                </div>
+                ${unschHtml}
+            `;
+        }
+
+        function calNavMonth(dir) {
+            calMonth += dir;
+            if (calMonth > 11) { calMonth = 0; calYear++; }
+            if (calMonth < 0) { calMonth = 11; calYear--; }
+            const activePlans = actionPlans.filter(p => p.status !== 'archived');
+            renderCalendarView(activePlans);
+        }
+
+        function renderPlans() { renderPlansView(); }
 
         function getAdvisorTitle(advisorId) {
             const all = {...baseAdvisors, ...optionalAdvisors};
@@ -1202,6 +1416,10 @@
 
         async function updateItemNotes(planId, itemId, notes) {
             await updateItem(planId, itemId, { notes: notes });
+        }
+
+        async function updateItemDueDate(planId, itemId, dateVal) {
+            await updateItem(planId, itemId, { due_date: dateVal || null });
         }
 
         async function updateItem(planId, itemId, data) {
@@ -1283,6 +1501,16 @@
             }
         }
 
+        function estimateTimeClient(desc) {
+            const l = desc.toLowerCase();
+            if (['hire','launch','expand','certify','train','construct','build'].some(w => l.includes(w))) return '1–3 months';
+            if (['plan','budget','monitor','track','evaluate','assess'].some(w => l.includes(w))) return '2–4 weeks';
+            if (['implement','set up','create','prepare','install','configure','establish','update'].some(w => l.includes(w))) return '1–2 weeks';
+            if (['contact','call','schedule','apply','submit','register','sign up','enroll'].some(w => l.includes(w))) return '3–5 days';
+            if (['review','check','read','research','verify','confirm','look into','explore'].some(w => l.includes(w))) return '1–2 days';
+            return '1–2 weeks';
+        }
+
         function extractClientItems(text, advisorSource) {
             const items = [];
             const lines = text.split('\n');
@@ -1299,7 +1527,7 @@
                         } else if (['consider','optional','long-term','eventually','when possible'].some(w => lower.includes(w))) {
                             priority = 'low';
                         }
-                        items.push({ description: desc, advisor_source: advisorSource, priority: priority });
+                        items.push({ description: desc, advisor_source: advisorSource, priority: priority, time_estimate: estimateTimeClient(desc) });
                     }
                 }
             }
