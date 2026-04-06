@@ -1460,26 +1460,22 @@
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
 
-            let allItems = [];
-            responses.forEach(resp => {
-                const items = extractClientItems(resp.response, resp.advisor_id);
-                allItems = allItems.concat(items);
-            });
-
-            if (allItems.length === 0) {
-                const items = extractClientItems(summaryText, null);
-                allItems = items;
+            const payload = { title };
+            if (responses && responses.length > 0) {
+                payload.advisor_responses = responses.map(r => ({
+                    advisor_id: r.advisor_id || r.id,
+                    response: r.response
+                }));
+                payload.advisor_response = summaryText;
+            } else {
+                payload.advisor_response = summaryText;
             }
 
             try {
                 const response = await fetch('/api/plans', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: title,
-                        items: allItems.length > 0 ? allItems : undefined,
-                        advisor_response: allItems.length === 0 ? summaryText : undefined
-                    })
+                    body: JSON.stringify(payload)
                 });
                 const data = await response.json();
                 if (data.error) {

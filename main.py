@@ -457,27 +457,84 @@ def estimate_time(desc):
     return '1–2 weeks'
 
 
+ACTION_VERBS = [
+    'review', 'contact', 'apply', 'submit', 'schedule', 'create', 'implement',
+    'consider', 'explore', 'develop', 'build', 'monitor', 'track', 'update',
+    'register', 'evaluate', 'research', 'check', 'verify', 'consult', 'plan',
+    'budget', 'prepare', 'establish', 'set up', 'identify', 'assess', 'secure',
+    'obtain', 'pursue', 'negotiate', 'diversify', 'reduce', 'increase',
+    'analyze', 'ensure', 'leverage', 'optimize', 'upgrade', 'expand', 'hire',
+    'train', 'certify', 'enroll', 'sign up', 'reach out', 'look into',
+]
+
+ACTION_PHRASES = [
+    'you should', 'you need to', 'you must', 'you could', 'you can',
+    'we recommend', 'we suggest', 'it is recommended', 'consider',
+    'next step', 'key action', 'prioritize', 'focus on', 'make sure',
+    'take advantage', 'take action', 'important to',
+]
+
+
+def _classify_item(desc):
+    lower = desc.lower()
+    priority = 'medium'
+    if any(w in lower for w in ['immediate', 'urgent', 'critical', 'asap', 'right away', 'now']):
+        priority = 'high'
+    elif any(w in lower for w in ['consider', 'optional', 'long-term', 'eventually', 'when possible']):
+        priority = 'low'
+    return priority, estimate_time(desc)
+
+
 def extract_action_items(text, advisor_source=None):
+    """Extract bullet-point action items from text."""
     items = []
-    lines = text.strip().split('\n')
-    for line in lines:
+    for line in text.strip().split('\n'):
         stripped = line.strip()
         match = re.match(r'^(?:\d+[\.\)]\s*|[-*•]\s+)(.*)', stripped)
         if match:
             desc = match.group(1).strip()
             if len(desc) > 10:
-                priority = 'medium'
-                lower = desc.lower()
-                if any(w in lower for w in ['immediate', 'urgent', 'critical', 'asap', 'right away']):
-                    priority = 'high'
-                elif any(w in lower for w in ['consider', 'optional', 'long-term', 'eventually', 'when possible']):
-                    priority = 'low'
+                priority, te = _classify_item(desc)
                 items.append({
                     'description': desc,
                     'advisor_source': advisor_source,
                     'priority': priority,
-                    'time_estimate': estimate_time(desc)
+                    'time_estimate': te
                 })
+    return items
+
+
+def extract_prose_action_items(text, advisor_source=None):
+    """Extract action items from paragraph prose by detecting imperative/recommendation sentences."""
+    items = []
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    seen = set()
+    for sent in sentences:
+        sent = sent.strip().strip('"\'')
+        if len(sent) < 15 or len(sent) > 250:
+            continue
+        lower = sent.lower()
+        is_action = (
+            any(lower.startswith(v) for v in ACTION_VERBS) or
+            any(p in lower for p in ACTION_PHRASES)
+        )
+        if not is_action:
+            continue
+        clean = re.sub(r'^(you should|you need to|you must|we recommend that you|we suggest you?)\s+', '', sent, flags=re.IGNORECASE).strip()
+        clean = clean.rstrip('.')
+        if len(clean) < 12:
+            continue
+        key = clean.lower()[:60]
+        if key in seen:
+            continue
+        seen.add(key)
+        priority, te = _classify_item(clean)
+        items.append({
+            'description': clean,
+            'advisor_source': advisor_source,
+            'priority': priority,
+            'time_estimate': te
+        })
     return items
 
 
@@ -495,9 +552,25 @@ def create_plan():
     items = data.get('items', [])
     advisor_response = data.get('advisor_response', '')
     advisor_source = data.get('advisor_source', None)
+    advisor_responses = data.get('advisor_responses', [])
 
-    if not items and advisor_response:
-        items = extract_action_items(advisor_response, advisor_source)
+    if not items:
+        if advisor_responses:
+            seen_descs = set()
+            for ar in advisor_responses:
+                src = ar.get('advisor_id') or ar.get('advisor_source') or advisor_source
+                text = ar.get('response', '')
+                bullet_items = extract_action_items(text, src)
+                prose_items = extract_prose_action_items(text, src) if not bullet_items else []
+                for it in (bullet_items or prose_items):
+                    key = it['description'].lower()[:80]
+                    if key not in seen_descs:
+                        seen_descs.add(key)
+                        items.append(it)
+        if not items and advisor_response:
+            items = extract_action_items(advisor_response, advisor_source)
+            if not items:
+                items = extract_prose_action_items(advisor_response, advisor_source)
 
     if not items:
         return jsonify({'error': 'No action items could be extracted or provided'}), 400
