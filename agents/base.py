@@ -47,11 +47,23 @@ def load_training_data(file_path):
         return None
 
 
+def _normalize_words(message):
+    import re
+    return set(re.sub(r"[^\w\s]", " ", message.lower()).split())
+
+
 def _is_price_question(message):
     if not message:
         return False
+    words = _normalize_words(message)
     msg_lower = message.lower()
-    return any(kw in msg_lower for kw in PRICE_KEYWORDS)
+    for kw in PRICE_KEYWORDS:
+        if ' ' in kw:
+            if kw in msg_lower:
+                return True
+        elif kw in words:
+            return True
+    return False
 
 
 class BaseAdvisor:

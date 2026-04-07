@@ -84,9 +84,15 @@ ADVISOR_TOPICS = {
 class BoardChair:
 
     @staticmethod
+    def _normalize_words(message):
+        import re
+        cleaned = re.sub(r"[^\w\s]", " ", message.lower())
+        return set(cleaned.split())
+
+    @staticmethod
     def route(message, active_advisors, user_profile=None):
         msg_lower = message.lower()
-        words = set(msg_lower.split())
+        words = BoardChair._normalize_words(message)
 
         scores = {}
         for advisor_id, keywords in ADVISOR_TOPICS.items():

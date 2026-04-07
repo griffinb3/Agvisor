@@ -924,6 +924,12 @@
                 body: JSON.stringify({ message, session_id: sessionId, advisor: directAdvisorId })
             });
 
+            if (!response.ok) {
+                removeLoadingMessage(loadingId);
+                addMessage('Sorry, there was an error connecting to the advisor. Please try again.', 'error');
+                return;
+            }
+
             await consumeSSEStream(response, {
                 meta: (ev) => {
                     removeLoadingMessage(loadingId);
@@ -961,6 +967,12 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message, session_id: sessionId, ask_all: askAllMode })
             });
+
+            if (!response.ok) {
+                removeLoadingMessage(loadingId);
+                addMessage('Sorry, there was an error reaching the board. Please try again.', 'error');
+                return;
+            }
 
             await consumeSSEStream(response, {
                 meta: (ev) => {
