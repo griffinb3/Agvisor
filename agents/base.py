@@ -8,6 +8,16 @@ logger = logging.getLogger(__name__)
 _client = None
 _training_data_cache = {}
 
+MAX_TRAINING_WORDS = 2000
+
+PRICE_KEYWORDS = {
+    'price', 'prices', 'pricing', 'market', 'markets', 'commodity', 'commodities',
+    'grain', 'corn', 'soybean', 'soybeans', 'wheat', 'cotton', 'cattle', 'hog',
+    'hogs', 'milk', 'futures', 'hedge', 'hedging', 'basis', 'cash price',
+    'crop price', 'feed cost', 'input cost', 'sell', 'selling', 'merchandising',
+    'elevator', 'contract', 'spot', 'forward',
+}
+
 
 def get_openai_client():
     global _client
@@ -27,11 +37,21 @@ def load_training_data(file_path):
         full_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), file_path)
         with open(full_path, 'r') as f:
             content = f.read()
+        words = content.split()
+        if len(words) > MAX_TRAINING_WORDS:
+            content = ' '.join(words[:MAX_TRAINING_WORDS]) + '\n\n[Reference truncated]'
         _training_data_cache[file_path] = content
         return content
     except (FileNotFoundError, IOError):
         _training_data_cache[file_path] = None
         return None
+
+
+def _is_price_question(message):
+    if not message:
+        return False
+    msg_lower = message.lower()
+    return any(kw in msg_lower for kw in PRICE_KEYWORDS)
 
 
 class BaseAdvisor:
@@ -50,7 +70,7 @@ class BaseAdvisor:
         }
 
     @classmethod
-    def build_system_prompt(cls, user_profile=None, direct_mode=False):
+    def build_system_prompt(cls, user_profile=None, direct_mode=False, message=None):
         base = cls.system_prompt
 
         if cls.training_data_file:
@@ -131,7 +151,7 @@ class BaseAdvisor:
             except Exception as e:
                 logger.warning(f"Failed to load seasonal context: {e}")
 
-            if state or business_type:
+            if (state or business_type) and _is_price_question(message):
                 try:
                     from data.commodity_prices import get_relevant_prices
                     price_data = get_relevant_prices(state or None, business_type or None)
@@ -157,7 +177,8 @@ class BaseAdvisor:
         return base
 
     @classmethod
-    def get_response(cls, message, session_id, user_profile, conversation_histories, direct_mode=False):
+    def get_response(cls, message, session_id, user_profile, conversation_histories,
+                     direct_mode=False, rag_context=None):
         client = get_openai_client()
         advisor_id = cls.get_advisor_id()
 
@@ -165,16 +186,16 @@ class BaseAdvisor:
         if history_key not in conversation_histories:
             conversation_histories[history_key] = []
 
-        system_prompt = cls.build_system_prompt(user_profile, direct_mode=direct_mode)
+        system_prompt = cls.build_system_prompt(user_profile, direct_mode=direct_mode, message=message)
 
-        rag_context = None
-        try:
-            from data.rag import get_relevant_context
-            state = user_profile.get('state') if user_profile else None
-            btype = user_profile.get('business_type') if user_profile else None
-            rag_context = get_relevant_context(message, top_k=3, state_name=state, business_type=btype)
-        except Exception as e:
-            logger.warning(f"Failed to retrieve RAG context: {e}")
+        if rag_context is None:
+            try:
+                from data.rag import get_relevant_context
+                state = user_profile.get('state') if user_profile else None
+                btype = user_profile.get('business_type') if user_profile else None
+                rag_context = get_relevant_context(message, top_k=3, state_name=state, business_type=btype)
+            except Exception as e:
+                logger.warning(f"Failed to retrieve RAG context: {e}")
 
         if rag_context:
             system_prompt += f"\n\nRELEVANT REFERENCE DOCUMENTS (from USDA publications and extension guides — cite specific details when applicable):\n{rag_context}"

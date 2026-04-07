@@ -1,12 +1,16 @@
 import re
 import csv
 import io
+import json
+import logging
 from datetime import datetime, date, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, Response, stream_with_context
 import os
 import psycopg2
 import psycopg2.extras
+
+logger = logging.getLogger(__name__)
 
 from data.financial_analysis import analyze_records
 
@@ -175,10 +179,11 @@ def detect_specific_advisor(message, active_advisors):
     return None
 
 
-def get_advisor_response(advisor_id, message, session_id, user_profile, direct_mode=False):
+def get_advisor_response(advisor_id, message, session_id, user_profile, direct_mode=False, rag_context=None):
     advisor_class = ADVISOR_CLASSES.get(advisor_id)
     if advisor_class:
-        return advisor_class.get_response(message, session_id, user_profile, conversation_histories, direct_mode=direct_mode)
+        return advisor_class.get_response(message, session_id, user_profile, conversation_histories,
+                                          direct_mode=direct_mode, rag_context=rag_context)
     return {
         'advisor_id': advisor_id,
         'response': "Advisor not found.",
@@ -344,11 +349,21 @@ def chat_all():
         selected_advisors = {aid: ALL_ADVISORS[aid] for aid in BASE_ADVISOR_IDS}
         routing_rationale = "Consulting core advisors for a comprehensive perspective."
 
+    shared_rag = None
+    try:
+        from data.rag import get_relevant_context
+        state = user_profile.get('state') if user_profile else None
+        btype = user_profile.get('business_type') if user_profile else None
+        shared_rag = get_relevant_context(message, top_k=3, state_name=state, business_type=btype)
+    except Exception as e:
+        logger.warning(f"Failed to retrieve shared RAG context: {e}")
+
     responses = []
     max_workers = max(1, len(selected_advisors))
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(get_advisor_response, advisor_id, message, session_id, user_profile): advisor_id
+            executor.submit(get_advisor_response, advisor_id, message, session_id, user_profile,
+                            False, shared_rag): advisor_id
             for advisor_id in selected_advisors.keys()
         }
 
@@ -382,6 +397,231 @@ def chat_all():
         'responses': responses,
         'summary': summary
     })
+
+
+@app.route('/api/chat/stream', methods=['POST'])
+def chat_stream():
+    data = request.json
+    message = data.get('message', '')
+    advisor_id = data.get('advisor', 'financial')
+    session_id = data.get('session_id', 'default')
+
+    if not message:
+        return jsonify({'error': 'No message provided'}), 400
+
+    user_profile = user_profiles.get(session_id)
+    advisor_class = ADVISOR_CLASSES.get(advisor_id)
+
+    def generate():
+        if not advisor_class:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Advisor not found'})}\n\n"
+            return
+
+        yield f"data: {json.dumps({'type': 'meta', 'advisor': {'title': advisor_class.title, 'icon': advisor_class.icon}})}\n\n"
+
+        from agents.base import get_openai_client
+        openai_client = get_openai_client()
+
+        system_prompt = advisor_class.build_system_prompt(user_profile, direct_mode=True, message=message)
+
+        try:
+            from data.rag import get_relevant_context
+            state = user_profile.get('state') if user_profile else None
+            btype = user_profile.get('business_type') if user_profile else None
+            rag_ctx = get_relevant_context(message, top_k=3, state_name=state, business_type=btype)
+            if rag_ctx:
+                system_prompt += f"\n\nRELEVANT REFERENCE DOCUMENTS (from USDA publications and extension guides — cite specific details when applicable):\n{rag_ctx}"
+        except Exception:
+            pass
+
+        history_key = f"{session_id}_{advisor_id}"
+        history = conversation_histories.get(history_key, [])
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(history)
+        messages.append({"role": "user", "content": message})
+
+        full_text = ''
+        try:
+            stream = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_completion_tokens=512,
+                stream=True
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices[0].delta.content else ''
+                if delta:
+                    full_text += delta
+                    yield f"data: {json.dumps({'type': 'token', 'content': delta})}\n\n"
+
+            if history_key not in conversation_histories:
+                conversation_histories[history_key] = []
+            conversation_histories[history_key].append({"role": "user", "content": message})
+            conversation_histories[history_key].append({"role": "assistant", "content": full_text})
+            if len(conversation_histories[history_key]) > 20:
+                conversation_histories[history_key] = conversation_histories[history_key][-20:]
+
+            yield f"data: {json.dumps({'type': 'done', 'full_text': full_text})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'}
+    )
+
+
+@app.route('/api/chat/all/stream', methods=['POST'])
+def chat_all_stream():
+    data = request.json
+    message = data.get('message', '')
+    session_id = data.get('session_id', 'default')
+    ask_all = data.get('ask_all', False)
+
+    if not message:
+        return jsonify({'error': 'No message provided'}), 400
+
+    user_profile = user_profiles.get(session_id)
+    active_advisors = get_active_advisors(session_id)
+
+    def generate():
+        from agents.base import get_openai_client
+        from agents.board_chair import SYNTHESIS_PROMPT
+        openai_client = get_openai_client()
+
+        specific_advisor = detect_specific_advisor(message, active_advisors)
+
+        if specific_advisor:
+            adv_class = ADVISOR_CLASSES.get(specific_advisor)
+            adv_info = active_advisors.get(specific_advisor, {})
+            yield f"data: {json.dumps({'type': 'meta', 'mode': 'single', 'advisor': {'title': adv_info.get('title', 'Advisor'), 'icon': adv_info.get('icon', 'user')}})}\n\n"
+
+            system_prompt = adv_class.build_system_prompt(user_profile, direct_mode=False, message=message) if adv_class else ""
+            try:
+                from data.rag import get_relevant_context
+                state = user_profile.get('state') if user_profile else None
+                btype = user_profile.get('business_type') if user_profile else None
+                rag_ctx = get_relevant_context(message, top_k=3, state_name=state, business_type=btype)
+                if rag_ctx:
+                    system_prompt += f"\n\nRELEVANT REFERENCE DOCUMENTS:\n{rag_ctx}"
+            except Exception:
+                pass
+
+            history_key = f"{session_id}_{specific_advisor}"
+            history = conversation_histories.get(history_key, [])
+            messages = [{"role": "system", "content": system_prompt}]
+            messages.extend(history)
+            messages.append({"role": "user", "content": message})
+
+            full_text = ''
+            try:
+                stream = openai_client.chat.completions.create(
+                    model="gpt-4o-mini", messages=messages, max_completion_tokens=512, stream=True
+                )
+                for chunk in stream:
+                    delta = chunk.choices[0].delta.content if chunk.choices[0].delta.content else ''
+                    if delta:
+                        full_text += delta
+                        yield f"data: {json.dumps({'type': 'token', 'content': delta})}\n\n"
+
+                if history_key not in conversation_histories:
+                    conversation_histories[history_key] = []
+                conversation_histories[history_key].append({"role": "user", "content": message})
+                conversation_histories[history_key].append({"role": "assistant", "content": full_text})
+                if len(conversation_histories[history_key]) > 20:
+                    conversation_histories[history_key] = conversation_histories[history_key][-20:]
+
+                yield f"data: {json.dumps({'type': 'done', 'full_text': full_text})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            return
+
+        if ask_all or len(active_advisors) <= 3:
+            selected_ids = list(active_advisors.keys())
+            routing_rationale = "All active advisors are weighing in on this question."
+        else:
+            selected_ids, routing_rationale = BoardChair.route(message, active_advisors, user_profile)
+
+        selected_advisors = {aid: active_advisors[aid] for aid in selected_ids if aid in active_advisors}
+        if not selected_advisors:
+            selected_advisors = {aid: ALL_ADVISORS[aid] for aid in BASE_ADVISOR_IDS}
+            routing_rationale = "Consulting core advisors for a comprehensive perspective."
+
+        selected_titles = [active_advisors[aid]['title'] for aid in selected_ids if aid in active_advisors]
+        yield f"data: {json.dumps({'type': 'meta', 'mode': 'orchestrated', 'routing': {'selected': list(selected_advisors.keys()), 'selected_titles': selected_titles, 'rationale': routing_rationale}})}\n\n"
+
+        shared_rag = None
+        try:
+            from data.rag import get_relevant_context
+            state = user_profile.get('state') if user_profile else None
+            btype = user_profile.get('business_type') if user_profile else None
+            shared_rag = get_relevant_context(message, top_k=3, state_name=state, business_type=btype)
+        except Exception:
+            pass
+
+        responses = []
+        max_workers = max(1, len(selected_advisors))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(get_advisor_response, aid, message, session_id, user_profile,
+                                False, shared_rag): aid
+                for aid in selected_advisors.keys()
+            }
+            for future in as_completed(futures):
+                try:
+                    responses.append(future.result())
+                except Exception as e:
+                    aid = futures[future]
+                    adv = selected_advisors[aid]
+                    responses.append({'advisor_id': aid, 'response': f"Error: {str(e)}",
+                                      'title': adv['title'], 'icon': adv['icon']})
+
+        responses.sort(key=lambda x: ADVISOR_ORDER.index(x['advisor_id']) if x['advisor_id'] in ADVISOR_ORDER else 99)
+        yield f"data: {json.dumps({'type': 'advisor_responses', 'responses': responses})}\n\n"
+
+        responses_text = ""
+        for resp in responses:
+            responses_text += f"\n\n**{resp['title']}:**\n{resp['response']}"
+
+        context = ""
+        if user_profile:
+            parts = []
+            if user_profile.get('business_type'):
+                parts.append(f"Business Type: {user_profile['business_type']}")
+            if user_profile.get('state'):
+                parts.append(f"State: {user_profile['state']}")
+            if parts:
+                context = "\nBusiness context: " + ", ".join(parts)
+
+        synth_messages = [
+            {"role": "system", "content": SYNTHESIS_PROMPT},
+            {"role": "user", "content": f"User's original question: {message}\n{context}\n\nAdvisor responses:{responses_text}\n\nProvide a concise board summary synthesizing the above responses."}
+        ]
+
+        full_text = ''
+        try:
+            stream = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=synth_messages,
+                max_completion_tokens=512,
+                stream=True
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices[0].delta.content else ''
+                if delta:
+                    full_text += delta
+                    yield f"data: {json.dumps({'type': 'token', 'content': delta})}\n\n"
+
+            yield f"data: {json.dumps({'type': 'done', 'full_text': full_text})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'}
+    )
 
 
 @app.route('/api/charts', methods=['GET'])

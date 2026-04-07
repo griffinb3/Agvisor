@@ -797,7 +797,7 @@
 
         chatForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const message = messageInput.value.trim();
             if (!message || isLoading) return;
 
@@ -822,53 +822,190 @@
             }
 
             isLoading = true;
-            const loadingId = addLoadingMessage();
-
             try {
                 if (currentMode === 'direct') {
-                    const response = await fetch('/api/chat', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            message: message,
-                            session_id: sessionId,
-                            advisor: directAdvisorId
-                        })
-                    });
-                    const data = await response.json();
-                    removeLoadingMessage(loadingId);
-                    if (data.error) {
-                        addMessage('Sorry, there was an error processing your request. Please try again.', 'error');
-                    } else {
-                        addDirectResponse(data, directAdvisorId);
-                    }
+                    await streamDirectResponse(message);
                 } else {
-                    const response = await fetch('/api/chat/all', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            message: message,
-                            session_id: sessionId,
-                            ask_all: askAllMode
-                        })
-                    });
-                    const data = await response.json();
-                    removeLoadingMessage(loadingId);
-                    if (data.error) {
-                        addMessage('Sorry, there was an error processing your request. Please try again.', 'error');
-                    } else if (data.mode === 'orchestrated') {
-                        addOrchestratedResponse(data);
-                    } else {
-                        addAllAdvisorResponses(data.responses);
-                    }
+                    await streamBoardResponse(message);
                 }
             } catch (error) {
-                removeLoadingMessage(loadingId);
                 addMessage('Sorry, there was a connection error. Please try again.', 'error');
             }
-
             isLoading = false;
         });
+
+        async function consumeSSEStream(response, handlers) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const event = JSON.parse(line.slice(6));
+                        if (handlers[event.type]) handlers[event.type](event);
+                    } catch (_) {}
+                }
+            }
+        }
+
+        function initStreamingContainer(headerHtml, wrapperClass) {
+            const containerDiv = document.createElement('div');
+            containerDiv.className = wrapperClass || 'advisor-responses-container';
+            const responseDiv = document.createElement('div');
+            responseDiv.className = 'board-summary board-summary-solo';
+            responseDiv.innerHTML = `
+                <div class="board-summary-header">${headerHtml}</div>
+                <div class="board-summary-content typewriter-content typewriter-active"></div>
+            `;
+            containerDiv.appendChild(responseDiv);
+            chatMessages.appendChild(containerDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return {
+                containerDiv,
+                responseDiv,
+                contentEl: responseDiv.querySelector('.board-summary-content')
+            };
+        }
+
+        function feedStreamToken(contentEl, streamedText) {
+            const nlIdx = streamedText.indexOf('\n💡');
+            contentEl.textContent = nlIdx >= 0 ? streamedText.slice(0, nlIdx) : streamedText;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function finalizeStreamedBubble(responseDiv, contentEl, fullText, extraFooterHtml) {
+            const { advice, highlight, question } = splitAdviceAndQuestion(fullText);
+            contentEl.classList.remove('typewriter-active');
+            contentEl.innerHTML = formatMessage(advice);
+            if (highlight || question) {
+                const qAttr = question ? question.replace(/"/g, '&quot;') : '';
+                let cHtml = `<div class="consider-section consider-fadein">
+                    <div class="consider-header"><i class="fas fa-lightbulb"></i> Things to Consider</div>
+                    <div class="consider-body">`;
+                if (highlight) {
+                    cHtml += `<div class="consider-highlight"><span class="consider-bullet">•</span><span>${escapeHtml(highlight)}</span></div>`;
+                }
+                if (question) {
+                    cHtml += `<div class="consider-question">
+                        <i class="fas fa-comment-dots"></i>
+                        <span class="consider-question-text">${formatMessage(question)}</span>
+                        <button class="ask-question-btn" onclick="askQuestion(this)" data-question="${qAttr}" title="Send this question to the board">
+                            <i class="fas fa-paper-plane"></i> Ask the board
+                        </button>
+                    </div>`;
+                }
+                cHtml += `</div></div>`;
+                responseDiv.insertAdjacentHTML('beforeend', cHtml);
+                setTimeout(() => {
+                    const cs = responseDiv.querySelector('.consider-fadein');
+                    if (cs) cs.classList.add('consider-visible');
+                }, 50);
+            }
+            if (extraFooterHtml) {
+                responseDiv.insertAdjacentHTML('beforeend', extraFooterHtml);
+            }
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        async function streamDirectResponse(message) {
+            const loadingId = addLoadingMessage('Your advisor is thinking...');
+            let els = null;
+            let streamedText = '';
+
+            const response = await fetch('/api/chat/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, session_id: sessionId, advisor: directAdvisorId })
+            });
+
+            await consumeSSEStream(response, {
+                meta: (ev) => {
+                    removeLoadingMessage(loadingId);
+                    const adv = allAdvisors[directAdvisorId] || {};
+                    const icon = ev.advisor ? ev.advisor.icon : (adv.icon || 'user');
+                    const title = ev.advisor ? ev.advisor.title : (adv.title || 'Advisor');
+                    const headerHtml = `<i class="fas fa-${icon}"></i><span>${escapeHtml(title)}</span><span class="board-consulted">Direct</span>`;
+                    els = initStreamingContainer(headerHtml, 'advisor-responses-container direct-mode-response');
+                },
+                token: (ev) => {
+                    if (els) { streamedText += ev.content; feedStreamToken(els.contentEl, streamedText); }
+                },
+                done: (ev) => {
+                    if (els) {
+                        finalizeStreamedBubble(els.responseDiv, els.contentEl, ev.full_text, null);
+                        checkAndAppendDashboard(ev.full_text, els.containerDiv);
+                    }
+                },
+                error: () => {
+                    removeLoadingMessage(loadingId);
+                    addMessage('Sorry, there was an error. Please try again.', 'error');
+                }
+            });
+        }
+
+        async function streamBoardResponse(message) {
+            const loadingId = addLoadingMessage();
+            let els = null;
+            let streamedText = '';
+            let metaData = null;
+            let advisorResponsesData = [];
+
+            const response = await fetch('/api/chat/all/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, session_id: sessionId, ask_all: askAllMode })
+            });
+
+            await consumeSSEStream(response, {
+                meta: (ev) => {
+                    metaData = ev;
+                    if (ev.mode === 'single') {
+                        removeLoadingMessage(loadingId);
+                        const icon = ev.advisor ? ev.advisor.icon : 'user';
+                        const title = ev.advisor ? ev.advisor.title : 'Advisor';
+                        const headerHtml = `<i class="fas fa-${icon}"></i><span>${escapeHtml(title)}</span>`;
+                        els = initStreamingContainer(headerHtml, 'advisor-responses-container');
+                    }
+                },
+                advisor_responses: (ev) => {
+                    advisorResponsesData = ev.responses || [];
+                    if (metaData && metaData.mode === 'orchestrated') {
+                        removeLoadingMessage(loadingId);
+                        const summaryId = 'summary_' + Date.now();
+                        const advisorNames = metaData.routing ? (metaData.routing.selected_titles || []) : [];
+                        const boardHeaderHtml = `<i class="fas fa-users"></i><span>Board Response</span>${advisorNames.length ? `<span class="board-consulted">via ${escapeHtml(advisorNames.join(', '))}</span>` : ''}`;
+                        els = initStreamingContainer(boardHeaderHtml, 'advisor-responses-container');
+                        els.responseDiv.id = summaryId;
+                    }
+                },
+                token: (ev) => {
+                    if (els) { streamedText += ev.content; feedStreamToken(els.contentEl, streamedText); }
+                },
+                done: (ev) => {
+                    if (els) {
+                        let footerHtml = null;
+                        if (metaData && metaData.mode === 'orchestrated') {
+                            const summaryId = els.responseDiv.id;
+                            footerHtml = `<div class="board-summary-actions"><button class="save-plan-btn" data-summary-id="${summaryId}" onclick="saveAsPlan(this)"><i class="fas fa-save"></i> Save as Action Plan</button></div>`;
+                            els.responseDiv.dataset.summaryText = ev.full_text;
+                            els.responseDiv.dataset.responses = JSON.stringify(advisorResponsesData);
+                        }
+                        finalizeStreamedBubble(els.responseDiv, els.contentEl, ev.full_text, footerHtml);
+                        if (els.containerDiv) checkAndAppendDashboard(ev.full_text, els.containerDiv);
+                    }
+                },
+                error: () => {
+                    removeLoadingMessage(loadingId);
+                    addMessage('Sorry, there was an error. Please try again.', 'error');
+                }
+            });
+        }
 
         clearBtn.addEventListener('click', async () => {
             try {
@@ -980,16 +1117,16 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
-        function addLoadingMessage() {
+        function addLoadingMessage(text) {
             const id = 'loading_' + Date.now();
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message assistant-message loading';
             messageDiv.id = id;
-            
+            const label = text || 'Consulting advisors...';
             messageDiv.innerHTML = `
                 <div class="message-header">
                     <i class="fas fa-project-diagram"></i>
-                    <span class="advisor-name">Board Chair is coordinating advisors...</span>
+                    <span class="advisor-name">${label}</span>
                 </div>
                 <div class="message-content">
                     <div class="typing-indicator">
