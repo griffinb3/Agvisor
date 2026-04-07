@@ -12,7 +12,7 @@ import psycopg2.extras
 
 logger = logging.getLogger(__name__)
 
-from data.financial_analysis import analyze_records
+from data.financial_analysis import analyze_records, parse_chart_directive
 
 from agents import (
     ADVISOR_CLASSES, BASE_ADVISORS, OPTIONAL_ADVISORS, ALL_ADVISORS,
@@ -362,12 +362,17 @@ def chat():
     if 'Error' in result.get('response', ''):
         return jsonify({'error': result['response']}), 500
 
-    return jsonify({
-        'response': result['response'],
+    response_text, chart_data = parse_chart_directive(result['response'], user_profile)
+
+    resp = {
+        'response': response_text,
         'advisor': {
             'title': result['title']
         }
-    })
+    }
+    if chart_data:
+        resp['chart_data'] = chart_data
+    return jsonify(resp)
 
 
 @app.route('/api/chat/all', methods=['POST'])
@@ -387,10 +392,12 @@ def chat_all():
 
     if specific_advisor:
         result = get_advisor_response(specific_advisor, message, session_id, user_profile)
-        return jsonify({
-            'mode': 'single',
-            'responses': [result]
-        })
+        clean_text, chart_data = parse_chart_directive(result['response'], user_profile)
+        result['response'] = clean_text
+        single_resp = {'mode': 'single', 'responses': [result]}
+        if chart_data:
+            single_resp['chart_data'] = chart_data
+        return jsonify(single_resp)
 
     routing_rationale = None
     if ask_all or len(active_advisors) <= 3:
@@ -439,11 +446,18 @@ def chat_all():
 
     responses.sort(key=lambda x: ADVISOR_ORDER.index(x['advisor_id']) if x['advisor_id'] in ADVISOR_ORDER else 99)
 
+    chart_data = None
+    for r in responses:
+        clean_text, cdata = parse_chart_directive(r['response'], user_profile)
+        r['response'] = clean_text
+        if cdata and chart_data is None:
+            chart_data = cdata
+
     summary = BoardChair.synthesize(message, responses, user_profile)
 
     selected_titles = [active_advisors[aid]['title'] for aid in selected_ids if aid in active_advisors]
 
-    return jsonify({
+    resp = {
         'mode': 'orchestrated',
         'routing': {
             'selected': selected_ids,
@@ -452,7 +466,10 @@ def chat_all():
         },
         'responses': responses,
         'summary': summary
-    })
+    }
+    if chart_data:
+        resp['chart_data'] = chart_data
+    return jsonify(resp)
 
 
 @app.route('/api/chat/stream', methods=['POST'])

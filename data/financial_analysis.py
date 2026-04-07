@@ -1,9 +1,18 @@
 import csv
 import io
+import re
 import logging
 from difflib import SequenceMatcher
 
 logger = logging.getLogger(__name__)
+
+CHART_DIRECTIVE_RE = re.compile(r'\[CHART:(\w+):([^\]]+)\]', re.IGNORECASE)
+VALID_INLINE_CHART_TYPES = {'line', 'bar', 'doughnut'}
+INLINE_CHART_CANONICAL_COLS = {
+    'revenue', 'expenses', 'net_income', 'gross_profit', 'cogs',
+    'assets', 'liabilities', 'equity', 'debt',
+    'current_assets', 'current_liabilities', 'operating_income', 'ebitda',
+}
 
 COLUMN_ALIASES = {
     'revenue': ['revenue', 'total_revenue', 'total revenue', 'sales', 'total_sales', 'total sales', 'gross_revenue', 'gross revenue', 'income', 'total_income'],
@@ -563,4 +572,96 @@ def get_chart_data(rows, headers):
         'recommended_chart_type': recommended_chart_type,
         'composition': composition,
         'scatter_data': scatter_data
+    }
+
+
+def parse_chart_directive(text, user_profile):
+    """
+    Find and extract a [CHART:type:col1,col2,...] directive from advisor response text.
+    Returns (clean_text, chart_data_or_None).
+    chart_data will be None if no directive found or data cannot be resolved.
+    """
+    match = CHART_DIRECTIVE_RE.search(text)
+    if not match:
+        return text, None
+
+    chart_type = match.group(1).lower()
+    requested_cols = [c.strip().lower().replace(' ', '_') for c in match.group(2).split(',')]
+
+    if chart_type not in VALID_INLINE_CHART_TYPES:
+        chart_type = 'bar'
+
+    clean_text = CHART_DIRECTIVE_RE.sub('', text).strip()
+
+    if not user_profile:
+        return clean_text, None
+
+    business_data_files = user_profile.get('business_data_files', [])
+    if not business_data_files:
+        return clean_text, None
+
+    all_headers = []
+    all_rows = []
+    for bdf in business_data_files:
+        for h in bdf.get('headers', []):
+            if h not in all_headers:
+                all_headers.append(h)
+        all_rows.extend(bdf.get('preview', []))
+
+    if not all_headers or not all_rows:
+        return clean_text, None
+
+    col_mapping = _map_columns(all_headers)
+    year_col = col_mapping.get('year')
+
+    resolved = {}
+    for req in requested_cols:
+        if req in INLINE_CHART_CANONICAL_COLS and req in col_mapping:
+            resolved[req] = col_mapping[req]
+        else:
+            for canonical, actual in col_mapping.items():
+                if canonical == req or req in canonical or canonical in req:
+                    resolved[canonical] = actual
+                    break
+            if req not in resolved:
+                for h in all_headers:
+                    if _fuzzy_match_column(h, [req, req.replace('_', ' ')]):
+                        resolved[req] = h
+                        break
+
+    if not resolved:
+        return clean_text, None
+
+    labels = []
+    datasets = {k: [] for k in resolved}
+
+    for i, row in enumerate(all_rows[:20]):
+        if year_col:
+            lv = str(row.get(year_col, '')).strip()
+            label = lv if lv and lv.lower() not in ('none', 'null', '') else f"Period {i + 1}"
+        else:
+            label = f"Period {i + 1}"
+        labels.append(label)
+        for canonical, actual_col in resolved.items():
+            datasets[canonical].append(_safe_float(row.get(actual_col)))
+
+    datasets = {k: v for k, v in datasets.items() if any(x is not None for x in v)}
+    if not labels or not datasets:
+        return clean_text, None
+
+    composition = {}
+    if all_rows:
+        last_row = all_rows[len(labels) - 1]
+        for canonical, actual_col in resolved.items():
+            v = _safe_float(last_row.get(actual_col))
+            if v is not None:
+                composition[canonical] = v
+
+    return clean_text, {
+        'has_data': True,
+        'chart_type': chart_type,
+        'labels': labels,
+        'datasets': datasets,
+        'composition': composition,
+        'inline': True,
     }

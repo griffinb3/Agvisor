@@ -2898,3 +2898,63 @@ body {
     background: #fee;
     color: #c44;
 }
+
+/* === INLINE CHART (in chat bubbles) === */
+.inline-chart-container {
+    margin-top: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg-white);
+}
+
+.inline-chart-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    background: rgba(45, 90, 39, 0.06);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--primary-green);
+}
+
+.inline-chart-header i {
+    color: var(--accent-gold);
+    font-size: 0.9rem;
+}
+
+.inline-chart-header span {
+    flex: 1;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.inline-chart-expand-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+    color: var(--primary-green);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.inline-chart-expand-btn:hover {
+    background: var(--primary-green);
+    color: white;
+    border-color: var(--primary-green);
+}
+
+.inline-chart-wrap {
+    position: relative;
+    height: 220px;
+    padding: 0.5rem 0.75rem 0.75rem;
+}

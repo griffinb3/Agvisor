@@ -914,7 +914,7 @@
                 return;
             }
             if (data.mode === 'single') {
-                addAllAdvisorResponses(data.responses);
+                addAllAdvisorResponses(data.responses, data.chart_data);
             } else {
                 addOrchestratedResponse(data);
             }
@@ -1161,12 +1161,13 @@
             const headerHtml = `<i class="fas fa-${advisorIcon}"></i><span>${escapeHtml(advisorTitle)}</span><span class="board-consulted">Direct</span>`;
             renderResponseBubble(responseDiv, headerHtml, data.response, null);
             containerDiv.appendChild(responseDiv);
+            if (data.chart_data) renderInlineChart(responseDiv, data.chart_data);
             checkAndAppendDashboard(data.response, containerDiv);
             chatMessages.appendChild(containerDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
-        function addAllAdvisorResponses(responses) {
+        function addAllAdvisorResponses(responses, chartData) {
             const containerDiv = document.createElement('div');
             containerDiv.className = 'advisor-responses-container';
             
@@ -1183,6 +1184,7 @@
                 `;
                 containerDiv.appendChild(responseDiv);
             });
+            if (chartData) renderInlineChart(containerDiv, chartData);
             checkAndAppendDashboard(allText, containerDiv);
             chatMessages.appendChild(containerDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -1208,6 +1210,7 @@
             summaryDiv.id = summaryId;
             containerDiv.appendChild(summaryDiv);
 
+            if (data.chart_data) renderInlineChart(summaryDiv, data.chart_data);
             checkAndAppendDashboard(summaryText, containerDiv);
 
             chatMessages.appendChild(containerDiv);
@@ -2282,6 +2285,107 @@
             if (hasDashboardOffer(text)) {
                 appendDashboardButton(container);
             }
+        }
+
+        const _inlineChartRegistry = {};
+
+        function renderInlineChart(container, chartData) {
+            if (!chartData || !chartData.has_data) return;
+
+            const chartId = 'ic_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+            const typeLabel = { line: 'Trend', bar: 'Comparison', doughnut: 'Composition' }[chartData.chart_type] || 'Chart';
+
+            const wrap = document.createElement('div');
+            wrap.className = 'inline-chart-container';
+            wrap.innerHTML = `
+                <div class="inline-chart-header">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>${typeLabel} — based on your uploaded data</span>
+                    <button class="inline-chart-expand-btn" title="Open full dashboard" onclick="openDashboard()">
+                        <i class="fas fa-external-link-alt"></i> Full Dashboard
+                    </button>
+                </div>
+                <div class="inline-chart-wrap">
+                    <canvas id="${chartId}"></canvas>
+                </div>
+            `;
+            container.appendChild(wrap);
+
+            const canvas = document.getElementById(chartId);
+            if (!canvas) return;
+
+            const GREEN = 'rgba(45,90,39,';
+            const GOLD = 'rgba(201,162,39,';
+            const BLUE = 'rgba(52,152,219,';
+            const RED = 'rgba(231,76,60,';
+            const PURPLE = 'rgba(155,89,182,';
+            const TEAL = 'rgba(26,188,156,';
+            const PALETTE = [GREEN, GOLD, BLUE, RED, PURPLE, TEAL];
+
+            function fmtLabel(key) {
+                return key.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+            }
+            function fmtVal(v) {
+                if (v == null) return null;
+                const n = +v;
+                if (isNaN(n)) return String(v);
+                if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+                if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K';
+                return '$' + n.toFixed(0);
+            }
+
+            const commonTooltip = { callbacks: { label: ctx => ctx.dataset.label + ': ' + (fmtVal(ctx.raw) ?? ctx.raw) } };
+            const commonLegend = { position: 'bottom', labels: { usePointStyle: true, padding: 10, font: { size: 11 } } };
+            const commonScales = {
+                y: { ticks: { callback: v => fmtVal(v), font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+            };
+
+            const chartType = chartData.chart_type || 'bar';
+            const labels = chartData.labels || [];
+            const datasetKeys = Object.keys(chartData.datasets || {});
+
+            if (_inlineChartRegistry[chartId]) {
+                _inlineChartRegistry[chartId].destroy();
+                delete _inlineChartRegistry[chartId];
+            }
+
+            let chart;
+            if (chartType === 'doughnut') {
+                const comp = chartData.composition || {};
+                const compKeys = Object.keys(comp);
+                if (!compKeys.length) return;
+                const dLabels = compKeys.map(k => fmtLabel(k));
+                const dVals = compKeys.map(k => Math.abs(comp[k]));
+                const dColors = compKeys.map((_, i) => PALETTE[i % PALETTE.length] + '0.8)');
+                chart = new Chart(canvas, {
+                    type: 'doughnut',
+                    data: { labels: dLabels, datasets: [{ data: dVals, backgroundColor: dColors, borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }] },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: commonLegend, tooltip: { callbacks: { label: ctx => ctx.label + ': ' + (fmtVal(ctx.raw) || ctx.raw) } } }
+                    }
+                });
+            } else {
+                const datasets = datasetKeys.map((k, i) => ({
+                    label: fmtLabel(k),
+                    data: chartData.datasets[k],
+                    backgroundColor: PALETTE[i % PALETTE.length] + '0.7)',
+                    borderColor: PALETTE[i % PALETTE.length] + '1)',
+                    borderWidth: 2, fill: false, tension: 0.35, pointRadius: 3
+                }));
+                chart = new Chart(canvas, {
+                    type: chartType,
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: commonScales,
+                        plugins: { legend: commonLegend, tooltip: commonTooltip }
+                    }
+                });
+            }
+            if (chart) _inlineChartRegistry[chartId] = chart;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
     </script>

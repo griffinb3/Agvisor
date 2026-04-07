@@ -183,16 +183,21 @@ class BaseAdvisor:
             base += context
 
         has_financial = bool(user_profile and user_profile.get('financial_analysis'))
+        has_tabular = bool(user_profile and user_profile.get('business_data_files'))
         if direct_mode:
             base += "\n\nCONVERSATIONAL STYLE: Be direct, warm, and advisory — like a trusted one-on-one advisor. You are speaking directly with this user, so be personal and engaged."
             if has_financial:
                 base += " The user has uploaded financial records — reference their specific numbers and trends where relevant to your domain."
             base += "\n\nRESPONSE FORMAT: Write exactly ONE concise paragraph of expert advice. No numbered lists, no bullet points, no headers. Be specific, focused, and tight.\n\nAfter the paragraph, on a new line starting with '💡', write ONE single key insight the user should keep top of mind — the most important takeaway from your expertise on this topic. Write it as a punchy, direct statement (e.g., '💡 Locking in your input costs now protects your margins regardless of what prices do.').\n\nIf one specific piece of information would meaningfully sharpen your next response, add it on a new line starting with '❓' as a direct, focused question. Only ask if genuinely useful — if you have nothing worth asking, omit the ❓ line entirely."
+            if has_tabular:
+                base += "\n\nINLINE CHART (use at most once, only when a chart genuinely clarifies a trend or comparison in your advice): If your response discusses data that would be clearer as a chart, append exactly ONE directive on a line by itself at the very end: [CHART:type:col1,col2,...]\n- type must be: line (trends over time), bar (period comparison), or doughnut (composition breakdown)\n- Columns must be chosen from: revenue, expenses, net_income, gross_profit, cogs, assets, liabilities, equity\n- Example: [CHART:line:revenue,expenses,net_income]\n- Only include if the chart adds real insight; omit entirely if unsure or if the data does not support it."
         else:
             base += "\n\nCONVERSATIONAL STYLE: Be direct, warm, and advisory — like a trusted expert contributing to a board discussion. Speak from your specific area of expertise only."
             if has_financial:
                 base += " The user has uploaded financial records — reference their specific numbers and trends where relevant to your domain."
             base += "\n\nRESPONSE FORMAT: Write exactly ONE concise paragraph from your expert perspective. No numbered lists, no bullet points, no headers, no follow-up questions. Be specific, focused, and tight. The Board Chair will synthesize all perspectives and handle any follow-up with the user."
+            if has_tabular:
+                base += "\n\nINLINE CHART (optional, at most once): If your expert perspective involves a specific data trend or comparison that a chart would clarify, append ONE directive at the very end on its own line: [CHART:type:col1,col2,...]\n- type: line, bar, or doughnut. Columns from: revenue, expenses, net_income, gross_profit, cogs, assets, liabilities, equity\n- Example: [CHART:bar:revenue,expenses]\n- Omit if no chart adds value."
 
         return base
 
