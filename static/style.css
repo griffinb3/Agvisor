@@ -2175,7 +2175,33 @@ body {
     }
 }
 
+/* === TYPEWRITER EFFECT === */
+.typewriter-active::after {
+    content: '|';
+    display: inline-block;
+    color: var(--primary-green);
+    opacity: 1;
+    margin-left: 1px;
+    animation: tw-blink 0.6s step-end infinite;
+    font-weight: 300;
+}
+
+@keyframes tw-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
 /* === THINGS TO CONSIDER SECTION === */
+.consider-fadein {
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.consider-fadein.consider-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
 .consider-section {
     margin: 0;
     border-top: 1px solid rgba(45, 90, 39, 0.12);
