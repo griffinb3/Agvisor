@@ -905,7 +905,7 @@
             responseDiv.className = 'board-summary board-summary-solo';
             responseDiv.innerHTML = `
                 <div class="board-summary-header">${headerHtml}</div>
-                <div class="board-summary-content typewriter-content typewriter-active"></div>
+                <div class="board-summary-content"></div>
             `;
             containerDiv.appendChild(responseDiv);
             chatMessages.appendChild(containerDiv);
@@ -925,7 +925,6 @@
 
         function finalizeStreamedBubble(responseDiv, contentEl, fullText, extraFooterHtml) {
             const { advice, highlight, question } = splitAdviceAndQuestion(fullText);
-            contentEl.classList.remove('typewriter-active');
             contentEl.innerHTML = formatMessage(advice);
             if (highlight || question) {
                 const qAttr = question ? question.replace(/"/g, '&quot;') : '';
@@ -1248,72 +1247,44 @@
             };
         }
 
-        function typewriterEffect(el, plainText, finalHtml, onComplete) {
-            const len = plainText.length;
-            const speed = len < 200 ? 14 : len < 500 ? 9 : 6;
-            let i = 0;
-            el.textContent = '';
-            el.classList.add('typewriter-active');
-
-            function tick() {
-                if (i < len) {
-                    el.textContent = plainText.slice(0, i + 1);
-                    i++;
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                    setTimeout(tick, speed);
-                } else {
-                    el.classList.remove('typewriter-active');
-                    el.innerHTML = finalHtml;
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                    if (onComplete) onComplete();
-                }
-            }
-            tick();
-        }
-
         function renderResponseBubble(container, headerHtml, text, extraFooterHtml) {
             const { advice, highlight, question } = splitAdviceAndQuestion(text);
 
             container.innerHTML = `
                 <div class="board-summary-header">${headerHtml}</div>
-                <div class="board-summary-content typewriter-content"></div>
+                <div class="board-summary-content">${formatMessage(advice)}</div>
             `;
 
-            const contentEl = container.querySelector('.board-summary-content');
-
-            function afterTyping() {
-                if (highlight || question) {
-                    const qAttr = question ? question.replace(/"/g, '&quot;') : '';
-                    let cHtml = `<div class="consider-section consider-fadein">
-                        <div class="consider-header"><i class="fas fa-lightbulb"></i> Things to Consider</div>
-                        <div class="consider-body">`;
-                    if (highlight) {
-                        cHtml += `<div class="consider-highlight"><span class="consider-bullet">•</span><span>${escapeHtml(highlight)}</span></div>`;
-                    }
-                    if (question) {
-                        cHtml += `
-                            <div class="consider-question">
-                                <i class="fas fa-comment-dots"></i>
-                                <span class="consider-question-text">${formatMessage(question)}</span>
-                                <button class="ask-question-btn" onclick="askQuestion(this)" data-question="${qAttr}" title="Send this question to the board">
-                                    <i class="fas fa-paper-plane"></i> Ask the board
-                                </button>
-                            </div>`;
-                    }
-                    cHtml += `</div></div>`;
-                    container.insertAdjacentHTML('beforeend', cHtml);
-                    setTimeout(() => {
-                        const cs = container.querySelector('.consider-fadein');
-                        if (cs) cs.classList.add('consider-visible');
-                    }, 50);
+            if (highlight || question) {
+                const qAttr = question ? question.replace(/"/g, '&quot;') : '';
+                let cHtml = `<div class="consider-section consider-fadein">
+                    <div class="consider-header"><i class="fas fa-lightbulb"></i> Things to Consider</div>
+                    <div class="consider-body">`;
+                if (highlight) {
+                    cHtml += `<div class="consider-highlight"><span class="consider-bullet">•</span><span>${escapeHtml(highlight)}</span></div>`;
                 }
-                if (extraFooterHtml) {
-                    container.insertAdjacentHTML('beforeend', extraFooterHtml);
+                if (question) {
+                    cHtml += `
+                        <div class="consider-question">
+                            <i class="fas fa-comment-dots"></i>
+                            <span class="consider-question-text">${formatMessage(question)}</span>
+                            <button class="ask-question-btn" onclick="askQuestion(this)" data-question="${qAttr}" title="Send this question to the board">
+                                <i class="fas fa-paper-plane"></i> Ask the board
+                            </button>
+                        </div>`;
                 }
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+                cHtml += `</div></div>`;
+                container.insertAdjacentHTML('beforeend', cHtml);
+                setTimeout(() => {
+                    const cs = container.querySelector('.consider-fadein');
+                    if (cs) cs.classList.add('consider-visible');
+                }, 50);
             }
 
-            typewriterEffect(contentEl, advice, formatMessage(advice), afterTyping);
+            if (extraFooterHtml) {
+                container.insertAdjacentHTML('beforeend', extraFooterHtml);
+            }
+            chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
         function askQuestion(btn) {
