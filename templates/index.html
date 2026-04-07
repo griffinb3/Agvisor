@@ -1043,12 +1043,31 @@
                 <div class="board-summary-content">${formatMessage(advice)}</div>
             `;
             if (question) {
-                html += `<div class="response-question"><i class="fas fa-comment-dots"></i><span>${formatMessage(question)}</span></div>`;
+                const qAttr = question.replace(/"/g, '&quot;');
+                html += `
+                    <div class="response-question">
+                        <i class="fas fa-comment-dots"></i>
+                        <span class="response-question-text">${formatMessage(question)}</span>
+                        <button class="ask-question-btn" onclick="askQuestion(this)" data-question="${qAttr}" title="Send this question to the board">
+                            <i class="fas fa-paper-plane"></i> Ask the board
+                        </button>
+                    </div>
+                `;
             }
             if (extraFooterHtml) {
                 html += extraFooterHtml;
             }
             container.innerHTML = html;
+        }
+
+        function askQuestion(btn) {
+            const question = btn.dataset.question;
+            if (!question) return;
+            messageInput.value = question;
+            messageInput.style.height = 'auto';
+            messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
+            messageInput.focus();
+            chatForm.dispatchEvent(new Event('submit'));
         }
 
         const actionPlansBtn = document.getElementById('actionPlansBtn');
