@@ -262,8 +262,7 @@
             <button class="plans-close-btn" id="closePlansBtn"><i class="fas fa-times"></i></button>
         </div>
         <div class="plans-view-tabs" id="plansViewTabs">
-            <button class="plans-view-tab active" data-view="list"><i class="fas fa-list-ul"></i> List</button>
-            <button class="plans-view-tab" data-view="priority"><i class="fas fa-fire"></i> Priority</button>
+            <button class="plans-view-tab active" data-view="priority"><i class="fas fa-fire"></i> Priority</button>
             <button class="plans-view-tab" data-view="calendar"><i class="fas fa-calendar-alt"></i> Calendar</button>
         </div>
         <div class="plans-panel-body" id="plansPanelBody">
@@ -1108,7 +1107,7 @@
         const plansPriorityView = document.getElementById('plansPriorityView');
         const plansCalendarView = document.getElementById('plansCalendarView');
 
-        let currentPlansView = 'list';
+        let currentPlansView = 'priority';
         let calYear = new Date().getFullYear();
         let calMonth = new Date().getMonth();
         let calAutoNavigated = false;
@@ -1174,10 +1173,7 @@
             }
             plansEmpty.style.display = 'none';
 
-            if (currentPlansView === 'list') {
-                plansList.style.display = 'block';
-                renderListView(activePlans);
-            } else if (currentPlansView === 'priority') {
+            if (currentPlansView === 'priority') {
                 plansPriorityView.style.display = 'block';
                 renderPriorityView(activePlans);
             } else if (currentPlansView === 'calendar') {
@@ -1307,7 +1303,6 @@
                                         <div class="priority-item-desc">${escapeHtml(item.description)}</div>
                                         <div class="priority-item-meta">
                                             <span class="plan-time-est"><i class="fas fa-hourglass-half"></i> ${escapeHtml(item.time_estimate || '1–2 weeks')}</span>
-                                            ${item.due_date ? `<span class="priority-due"><i class="fas fa-calendar-day"></i> Due ${formatDueDate(item.due_date)}</span>` : ''}
                                             <span class="priority-plan-ref"><i class="fas fa-clipboard"></i> ${escapeHtml(item.planTitle)}</span>
                                         </div>
                                     </div>
