@@ -824,15 +824,59 @@
             isLoading = true;
             try {
                 if (currentMode === 'direct') {
-                    await streamDirectResponse(message);
+                    await sendDirectMessage(message);
                 } else {
-                    await streamBoardResponse(message);
+                    await sendBoardMessage(message);
                 }
             } catch (error) {
                 addMessage('Sorry, there was a connection error. Please try again.', 'error');
             }
             isLoading = false;
         });
+
+        async function sendDirectMessage(message) {
+            const loadingId = addLoadingMessage('Your advisor is thinking...');
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, session_id: sessionId, advisor: directAdvisorId })
+            });
+            removeLoadingMessage(loadingId);
+            if (!response.ok) {
+                addMessage('Sorry, there was an error connecting to your advisor. Please try again.', 'error');
+                return;
+            }
+            const data = await response.json();
+            if (data.error) {
+                addMessage('Sorry, there was an error. Please try again.', 'error');
+                return;
+            }
+            addDirectResponse(data, directAdvisorId);
+        }
+
+        async function sendBoardMessage(message) {
+            const loadingId = addLoadingMessage();
+            const response = await fetch('/api/chat/all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, session_id: sessionId, ask_all: askAllMode })
+            });
+            removeLoadingMessage(loadingId);
+            if (!response.ok) {
+                addMessage('Sorry, there was an error reaching the board. Please try again.', 'error');
+                return;
+            }
+            const data = await response.json();
+            if (data.error) {
+                addMessage('Sorry, there was an error. Please try again.', 'error');
+                return;
+            }
+            if (data.mode === 'single') {
+                addAllAdvisorResponses(data.responses);
+            } else {
+                addOrchestratedResponse(data);
+            }
+        }
 
         async function consumeSSEStream(response, handlers) {
             const reader = response.body.getReader();
