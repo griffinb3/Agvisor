@@ -1029,30 +1029,58 @@
 
         function splitAdviceAndQuestion(text) {
             const lines = text.split('\n');
-            const qIndex = lines.findIndex(l => l.trim().startsWith('❓'));
-            if (qIndex === -1) return { advice: text.trim(), question: null };
-            const advice = lines.slice(0, qIndex).join('\n').trim();
-            const question = lines.slice(qIndex).join('\n').replace(/^❓\s*/gm, '').trim();
-            return { advice, question };
+            let advice = [], highlight = null, questionLines = [];
+            let section = 'advice';
+            for (const line of lines) {
+                const t = line.trim();
+                if (t.startsWith('💡')) {
+                    section = 'highlight';
+                    const h = t.replace(/^💡\s*/, '').trim();
+                    if (h) highlight = h;
+                } else if (t.startsWith('❓')) {
+                    section = 'question';
+                    const q = t.replace(/^❓\s*/, '').trim();
+                    if (q) questionLines.push(q);
+                } else if (section === 'question') {
+                    if (t) questionLines.push(t);
+                } else if (section === 'highlight') {
+                    if (t) highlight = (highlight ? highlight + ' ' : '') + t;
+                } else {
+                    advice.push(line);
+                }
+            }
+            return {
+                advice: advice.join('\n').trim(),
+                highlight: highlight || null,
+                question: questionLines.join(' ').trim() || null
+            };
         }
 
         function renderResponseBubble(container, headerHtml, text, extraFooterHtml) {
-            const { advice, question } = splitAdviceAndQuestion(text);
+            const { advice, highlight, question } = splitAdviceAndQuestion(text);
             let html = `
                 <div class="board-summary-header">${headerHtml}</div>
                 <div class="board-summary-content">${formatMessage(advice)}</div>
             `;
-            if (question) {
-                const qAttr = question.replace(/"/g, '&quot;');
-                html += `
-                    <div class="response-question">
-                        <i class="fas fa-comment-dots"></i>
-                        <span class="response-question-text">${formatMessage(question)}</span>
-                        <button class="ask-question-btn" onclick="askQuestion(this)" data-question="${qAttr}" title="Send this question to the board">
-                            <i class="fas fa-paper-plane"></i> Ask the board
-                        </button>
-                    </div>
-                `;
+            if (highlight || question) {
+                const qAttr = question ? question.replace(/"/g, '&quot;') : '';
+                html += `<div class="consider-section">
+                    <div class="consider-header"><i class="fas fa-lightbulb"></i> Things to Consider</div>
+                    <div class="consider-body">`;
+                if (highlight) {
+                    html += `<div class="consider-highlight"><span class="consider-bullet">•</span><span>${escapeHtml(highlight)}</span></div>`;
+                }
+                if (question) {
+                    html += `
+                        <div class="consider-question">
+                            <i class="fas fa-comment-dots"></i>
+                            <span class="consider-question-text">${formatMessage(question)}</span>
+                            <button class="ask-question-btn" onclick="askQuestion(this)" data-question="${qAttr}" title="Send this question to the board">
+                                <i class="fas fa-paper-plane"></i> Ask the board
+                            </button>
+                        </div>`;
+                }
+                html += `</div></div>`;
             }
             if (extraFooterHtml) {
                 html += extraFooterHtml;
