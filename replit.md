@@ -27,7 +27,7 @@ Each advisor's system prompt is dynamically enriched with a robust context pipel
 The UI/UX includes a responsive chat interface, an onboarding modal, and a panel for managing `Saved Action Plans`, which allows users to track recommendations. Advisors' responses are displayed concisely.
 
 Key architectural features include:
-- **Multi-Format File Upload**: Supports CSV, Excel (.xlsx), PDF, Word (.docx), plain text (.txt), and RTF files. Tabular formats run through the financial analysis pipeline; document formats have their text extracted and injected into advisor prompts.
+- **Multi-File Upload**: Users can upload any number of files at any time via the "Manage Files" sidebar panel (drag-and-drop or browse). Supports CSV, Excel (.xlsx), PDF, Word (.docx), TXT, and RTF. Multiple tabular files are merged for chart generation and financial analysis; multiple documents have their text combined (word-budgeted per file) and injected into advisor prompts. Files are stored as `business_data_files[]` and `uploaded_documents[]` in the session profile. The profile modal also supports queuing multiple files before initial submission.
 - **Financial Analysis Engine**: Automatically computes profitability, liquidity, solvency, efficiency ratios, and year-over-year trends from uploaded financial data.
 - **Seasonal Calendar Awareness**: Advisors consider current agricultural seasons, upcoming deadlines, and growing season adjustments.
 - **Saved Action Plans**: Users can save board summaries as trackable action plans with progress tracking, priorities, and notes.

@@ -93,15 +93,15 @@
                 
                 <div class="form-group">
                     <label>Business Records or Documents (Optional)</label>
-                    <p class="form-hint">Upload financial data (CSV, Excel) or business documents (PDF, Word, TXT, RTF)</p>
+                    <p class="form-hint">Upload financial data (CSV, Excel) or business documents (PDF, Word, TXT, RTF) — add as many as you like</p>
                     <div class="file-upload-wrapper">
-                        <input type="file" id="businessRecords" accept=".csv,.xlsx,.pdf,.docx,.txt,.rtf">
+                        <input type="file" id="businessRecords" accept=".csv,.xlsx,.pdf,.docx,.txt,.rtf" multiple>
                         <div class="file-upload-label" id="fileLabel">
                             <i class="fas fa-file-upload"></i>
-                            <span>Choose a file or drag it here</span>
+                            <span>Choose files or drag them here</span>
                         </div>
                     </div>
-                    <p class="form-hint" id="fileStatus" style="margin-top: 0.5rem; color: var(--primary-green); display: none;"></p>
+                    <div id="profileFileQueue" style="margin-top:0.5rem;display:none;"></div>
                 </div>
                 
                 <button type="submit" class="submit-btn">
@@ -146,6 +146,9 @@
                 </div>
                 <button class="dashboard-btn" id="dashboardBtn" style="display:none;" onclick="openDashboard()">
                     <i class="fas fa-chart-line"></i> Financial Dashboard
+                </button>
+                <button class="files-btn" id="filesBtn" onclick="openFilesPanel()">
+                    <i class="fas fa-folder-open"></i> Manage Files <span class="files-count-badge" id="filesCountBadge" style="display:none;"></span>
                 </button>
                 <button class="clear-btn" id="clearChat">
                     <i class="fas fa-trash-alt"></i> Clear Conversation
@@ -252,6 +255,33 @@
             <i class="fas fa-upload"></i>
             <p>No financial data available</p>
             <span>Upload a CSV or Excel file with your financial records to see charts here.</span>
+        </div>
+    </div>
+
+    <div class="files-panel-overlay" id="filesPanelOverlay"></div>
+    <div class="files-panel" id="filesPanel">
+        <div class="files-panel-header">
+            <h2><i class="fas fa-folder-open"></i> Your Files</h2>
+            <button class="plans-close-btn" id="closeFilesBtn"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="files-panel-body">
+            <div class="files-upload-zone" id="filesUploadZone">
+                <input type="file" id="filesPanelInput" accept=".csv,.xlsx,.pdf,.docx,.txt,.rtf" multiple style="display:none;">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <p>Drop files here or <button type="button" class="files-browse-btn" onclick="document.getElementById('filesPanelInput').click()">browse</button></p>
+                <span>CSV, Excel, PDF, Word, TXT, RTF</span>
+            </div>
+            <div class="files-upload-status" id="filesUploadStatus" style="display:none;"></div>
+            <div class="files-list-section">
+                <div class="files-list-header">Uploaded Files</div>
+                <div id="filesListContainer">
+                    <div class="files-empty" id="filesEmpty">
+                        <i class="fas fa-file-upload"></i>
+                        <p>No files uploaded yet</p>
+                        <span>Upload financial records or documents to give your advisors better context</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -599,53 +629,63 @@
 
         const fileInput = document.getElementById('businessRecords');
         const fileLabel = document.getElementById('fileLabel');
-        const fileStatus = document.getElementById('fileStatus');
-        let uploadedFile = null;
+        const profileFileQueue = document.getElementById('profileFileQueue');
+        let queuedFiles = [];
 
         fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                uploadedFile = file;
-                fileLabel.innerHTML = `<i class="fas fa-file-check"></i><span>${file.name}</span>`;
-                fileLabel.classList.add('file-selected');
-            }
+            Array.from(e.target.files).forEach(f => {
+                if (!queuedFiles.find(q => q.name === f.name)) queuedFiles.push(f);
+            });
+            e.target.value = '';
+            renderProfileFileQueue();
         });
 
+        function renderProfileFileQueue() {
+            if (!queuedFiles.length) {
+                profileFileQueue.style.display = 'none';
+                fileLabel.innerHTML = '<i class="fas fa-file-upload"></i><span>Choose files or drag them here</span>';
+                fileLabel.classList.remove('file-selected');
+                return;
+            }
+            fileLabel.innerHTML = `<i class="fas fa-file-check"></i><span>${queuedFiles.length} file(s) ready to upload</span>`;
+            fileLabel.classList.add('file-selected');
+            profileFileQueue.style.display = 'block';
+            profileFileQueue.innerHTML = queuedFiles.map((f, i) => `
+                <div class="profile-queued-file">
+                    <i class="fas fa-file"></i>
+                    <span>${escapeHtml(f.name)}</span>
+                    <button type="button" onclick="removeQueuedFile(${i})"><i class="fas fa-times"></i></button>
+                </div>
+            `).join('');
+        }
+
+        function removeQueuedFile(idx) {
+            queuedFiles.splice(idx, 1);
+            renderProfileFileQueue();
+        }
+
         async function uploadBusinessRecords() {
-            if (!uploadedFile) return true;
-            
-            const formData = new FormData();
-            formData.append('file', uploadedFile);
-            formData.append('session_id', sessionId);
-            
-            try {
-                const response = await fetch('/api/upload-records', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const data = await response.json();
-                
-                if (data.error) {
-                    alert('Error uploading file: ' + data.error);
+            if (!queuedFiles.length) return true;
+            let hasTabular = false;
+            for (const file of queuedFiles) {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('session_id', sessionId);
+                try {
+                    const response = await fetch('/api/upload-records', { method: 'POST', body: formData });
+                    const data = await response.json();
+                    if (data.error) { alert('Error uploading ' + file.name + ': ' + data.error); return false; }
+                    if (data.type === 'tabular') hasTabular = true;
+                } catch (error) {
+                    alert('Error uploading ' + file.name + '. Please try again.');
                     return false;
                 }
-                
-                if (data.type === 'tabular') {
-                    fileStatus.textContent = `Uploaded: ${data.row_count} records processed`;
-                    setHasFinancialData(true);
-                    setTimeout(() => openDashboard(), 600);
-                } else {
-                    let detail = data.summary || 'Document processed';
-                    fileStatus.textContent = `Uploaded: ${detail}`;
-                }
-                fileStatus.style.display = 'block';
-                return true;
-            } catch (error) {
-                console.error('Upload error:', error);
-                alert('Error uploading file. Please try again.');
-                return false;
             }
+            if (hasTabular) {
+                setHasFinancialData(true);
+                setTimeout(() => openDashboard(), 600);
+            }
+            return true;
         }
 
         profileForm.addEventListener('submit', async (e) => {
@@ -685,7 +725,7 @@
             };
             
             try {
-                if (uploadedFile) {
+                if (queuedFiles.length) {
                     const uploadSuccess = await uploadBusinessRecords();
                     if (!uploadSuccess) return;
                 }
@@ -704,7 +744,9 @@
                 hideModal();
                 
                 localStorage.setItem('agvisorProfile', JSON.stringify(userProfile));
-                uploadedFile = null;
+                queuedFiles = [];
+                renderProfileFileQueue();
+                updateFilesBadge();
             } catch (error) {
                 console.error('Error saving profile:', error);
             }
@@ -1335,6 +1377,158 @@
         actionPlansBtn.addEventListener('click', openPlansPanel);
         closePlansBtn.addEventListener('click', closePlansPanel);
         actionPlansOverlay.addEventListener('click', closePlansPanel);
+
+        // === FILES PANEL ===
+        const filesPanel = document.getElementById('filesPanel');
+        const filesPanelOverlay = document.getElementById('filesPanelOverlay');
+        const closeFilesBtn = document.getElementById('closeFilesBtn');
+        const filesPanelInput = document.getElementById('filesPanelInput');
+        const filesUploadZone = document.getElementById('filesUploadZone');
+        const filesUploadStatus = document.getElementById('filesUploadStatus');
+        const filesListContainer = document.getElementById('filesListContainer');
+        const filesEmpty = document.getElementById('filesEmpty');
+        const filesCountBadge = document.getElementById('filesCountBadge');
+
+        function openFilesPanel() {
+            filesPanel.classList.add('open');
+            filesPanelOverlay.classList.add('open');
+            loadFilesList();
+        }
+
+        function closeFilesPanel() {
+            filesPanel.classList.remove('open');
+            filesPanelOverlay.classList.remove('open');
+        }
+
+        closeFilesBtn.addEventListener('click', closeFilesPanel);
+        filesPanelOverlay.addEventListener('click', closeFilesPanel);
+
+        filesUploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            filesUploadZone.classList.add('drag-over');
+        });
+        filesUploadZone.addEventListener('dragleave', () => filesUploadZone.classList.remove('drag-over'));
+        filesUploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            filesUploadZone.classList.remove('drag-over');
+            const files = Array.from(e.dataTransfer.files);
+            files.forEach(f => uploadFileToPanel(f));
+        });
+        filesPanelInput.addEventListener('change', (e) => {
+            Array.from(e.target.files).forEach(f => uploadFileToPanel(f));
+            e.target.value = '';
+        });
+
+        async function uploadFileToPanel(file) {
+            const allowed = ['.csv','.xlsx','.pdf','.docx','.txt','.rtf'];
+            const ext = '.' + file.name.split('.').pop().toLowerCase();
+            if (!allowed.includes(ext)) {
+                showFilesStatus(`Unsupported file type: ${file.name}`, 'error');
+                return;
+            }
+            showFilesStatus(`Uploading ${file.name}...`, 'loading');
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('session_id', sessionId);
+            try {
+                const res = await fetch('/api/upload-records', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.error) {
+                    showFilesStatus(`Error: ${data.error}`, 'error');
+                    return;
+                }
+                if (data.type === 'tabular') {
+                    showFilesStatus(`${file.name} — ${data.row_count} records loaded`, 'success');
+                    setHasFinancialData(true);
+                } else {
+                    showFilesStatus(`${file.name} — document processed`, 'success');
+                }
+                loadFilesList();
+                updateFilesBadge();
+            } catch (err) {
+                showFilesStatus('Upload failed. Please try again.', 'error');
+            }
+        }
+
+        function showFilesStatus(msg, type) {
+            filesUploadStatus.textContent = msg;
+            filesUploadStatus.className = 'files-upload-status files-status-' + type;
+            filesUploadStatus.style.display = 'block';
+            if (type === 'success') setTimeout(() => { filesUploadStatus.style.display = 'none'; }, 3000);
+        }
+
+        async function loadFilesList() {
+            try {
+                const res = await fetch(`/api/get-files?session_id=${sessionId}`);
+                const data = await res.json();
+                renderFilesList(data.files || []);
+                updateFilesBadge(data.files || []);
+            } catch (err) {
+                console.error('Error loading files:', err);
+            }
+        }
+
+        function renderFilesList(files) {
+            if (!files.length) {
+                filesListContainer.innerHTML = '';
+                filesListContainer.appendChild(filesEmpty);
+                filesEmpty.style.display = 'flex';
+                return;
+            }
+            filesEmpty.style.display = 'none';
+            const icons = { tabular: 'fa-table', document: 'fa-file-alt' };
+            const labels = { tabular: 'Spreadsheet', document: 'Document' };
+            filesListContainer.innerHTML = files.map(f => `
+                <div class="files-list-item">
+                    <div class="files-item-icon files-icon-${f.file_type}">
+                        <i class="fas ${icons[f.file_type] || 'fa-file'}"></i>
+                    </div>
+                    <div class="files-item-info">
+                        <div class="files-item-name" title="${escapeHtml(f.filename)}">${escapeHtml(f.filename)}</div>
+                        <div class="files-item-meta">${labels[f.file_type] || 'File'} · ${f.file_type === 'tabular' ? f.row_count + ' rows' : (f.word_count || 0) + ' words'}</div>
+                    </div>
+                    <button class="files-remove-btn" onclick="removeUploadedFile('${escapeHtml(f.filename)}','${f.file_type}')" title="Remove file">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function updateFilesBadge(files) {
+            if (files === undefined) {
+                fetch(`/api/get-files?session_id=${sessionId}`)
+                    .then(r => r.json())
+                    .then(d => updateFilesBadge(d.files || []));
+                return;
+            }
+            if (files.length > 0) {
+                filesCountBadge.textContent = files.length;
+                filesCountBadge.style.display = 'inline-block';
+            } else {
+                filesCountBadge.style.display = 'none';
+            }
+        }
+
+        async function removeUploadedFile(filename, fileType) {
+            try {
+                await fetch('/api/remove-file', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId, filename, file_type: fileType })
+                });
+                if (fileType === 'tabular') {
+                    const res = await fetch(`/api/get-files?session_id=${sessionId}`);
+                    const data = await res.json();
+                    const hasTabular = (data.files || []).some(f => f.file_type === 'tabular');
+                    if (!hasTabular) setHasFinancialData(false);
+                }
+                loadFilesList();
+            } catch (err) {
+                console.error('Error removing file:', err);
+            }
+        }
+
+        updateFilesBadge();
 
         async function loadPlans() {
             try {

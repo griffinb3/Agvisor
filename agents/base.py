@@ -107,24 +107,32 @@ class BaseAdvisor:
             if business_description:
                 context += f"- Description: {business_description}\n"
 
-            if business_data:
-                context += "\n\nBUSINESS RECORDS PROVIDED:\n"
-                context += f"- {business_data.get('summary', 'Business data uploaded')}\n"
-                context += f"- Data columns: {', '.join(business_data.get('headers', []))}\n"
-                context += "\nSample data from their records:\n"
-                for i, row in enumerate(business_data.get('preview', [])[:5]):
-                    row_str = ', '.join([f"{k}: {v}" for k, v in list(row.items())[:5]])
+            business_data_files = user_profile.get('business_data_files', [])
+            if business_data_files:
+                context += f"\n\nBUSINESS RECORDS PROVIDED ({len(business_data_files)} file(s)):\n"
+                for bdf in business_data_files:
+                    context += f"- {bdf.get('filename', 'file')}: {bdf.get('summary', 'Business data uploaded')}"
+                    if bdf.get('headers'):
+                        context += f" | Columns: {', '.join(bdf['headers'][:10])}"
+                    context += "\n"
+                first = business_data_files[0]
+                context += "\nSample data from records:\n"
+                for i, row in enumerate(first.get('preview', [])[:5]):
+                    row_str = ', '.join([f"{k}: {v}" for k, v in list(row.items())[:6]])
                     context += f"  Row {i+1}: {row_str}\n"
                 context += "\nUse this business data to provide specific, data-driven advice. Reference their actual numbers when relevant."
 
-            uploaded_doc = user_profile.get('uploaded_document')
-            if uploaded_doc:
-                doc_text = uploaded_doc.get('text', '')
-                doc_words = doc_text.split()
-                if len(doc_words) > 3000:
-                    doc_text = ' '.join(doc_words[:3000]) + '\n\n[Document truncated for context]'
-                context += f"\n\nUPLOADED BUSINESS DOCUMENT (provided by user — {uploaded_doc.get('summary', 'document')}):\n{doc_text}"
-                context += "\nUse the content of this document to provide specific, informed advice. Reference relevant details from the document when applicable."
+            uploaded_documents = user_profile.get('uploaded_documents', [])
+            if uploaded_documents:
+                word_budget = max(800, 4000 // len(uploaded_documents))
+                context += f"\n\nUPLOADED BUSINESS DOCUMENTS ({len(uploaded_documents)} file(s)):\n"
+                for doc in uploaded_documents:
+                    doc_text = doc.get('text', '')
+                    doc_words = doc_text.split()
+                    if len(doc_words) > word_budget:
+                        doc_text = ' '.join(doc_words[:word_budget]) + ' [truncated]'
+                    context += f"\n--- {doc.get('filename', doc.get('summary', 'Document'))} ---\n{doc_text}\n"
+                context += "\nUse the content of these documents to provide specific, informed advice. Reference relevant details when applicable."
 
             financial_analysis = user_profile.get('financial_analysis')
             if financial_analysis:

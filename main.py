@@ -213,10 +213,28 @@ def save_profile():
         'business_type': data.get('business_type', ''),
         'business_description': data.get('business_description', ''),
         'selected_advisors': data.get('selected_advisors', []),
-        'business_data': existing_profile.get('business_data', None)
+        'business_data_files': existing_profile.get('business_data_files', []),
+        'uploaded_documents': existing_profile.get('uploaded_documents', []),
+        'financial_analysis': existing_profile.get('financial_analysis', None),
     }
 
     return jsonify({'status': 'saved', 'profile': user_profiles[session_id]})
+
+
+def _recompute_financial_analysis(profile):
+    files = profile.get('business_data_files', [])
+    if not files:
+        profile.pop('financial_analysis', None)
+        return
+    all_headers = []
+    all_rows = []
+    for bdf in files:
+        for h in bdf.get('headers', []):
+            if h not in all_headers:
+                all_headers.append(h)
+        all_rows.extend(bdf.get('preview', []))
+    result = analyze_records(all_headers, all_rows)
+    profile['financial_analysis'] = result if result else None
 
 
 @app.route('/api/upload-records', methods=['POST'])
@@ -233,32 +251,39 @@ def upload_records():
     try:
         from data.file_parsers import parse_file
         file_bytes = file.read()
-        result = parse_file(file_bytes, file.filename)
+        filename = file.filename
+        result = parse_file(file_bytes, filename)
 
         if session_id not in user_profiles:
             user_profiles[session_id] = {}
 
+        profile = user_profiles[session_id]
+
         if result['type'] == 'tabular':
-            user_profiles[session_id]['business_data'] = {
+            if 'business_data_files' not in profile:
+                profile['business_data_files'] = []
+            profile['business_data_files'] = [f for f in profile['business_data_files'] if f.get('filename') != filename]
+            profile['business_data_files'].append({
+                'filename': filename,
                 'summary': result['summary'],
                 'headers': result['headers'],
                 'preview': result['preview'],
                 'row_count': result['row_count']
-            }
-            user_profiles[session_id].pop('uploaded_document', None)
-
-            financial_analysis = analyze_records(result['headers'], result['preview'])
-            if financial_analysis:
-                user_profiles[session_id]['financial_analysis'] = financial_analysis
-
+            })
+            _recompute_financial_analysis(profile)
             return jsonify({
                 'status': 'uploaded',
                 'type': 'tabular',
+                'filename': filename,
                 'summary': result['summary'],
                 'row_count': result['row_count']
             })
         else:
-            user_profiles[session_id]['uploaded_document'] = {
+            if 'uploaded_documents' not in profile:
+                profile['uploaded_documents'] = []
+            profile['uploaded_documents'] = [d for d in profile['uploaded_documents'] if d.get('filename') != filename]
+            profile['uploaded_documents'].append({
+                'filename': filename,
                 'format': result['format'],
                 'text': result['text'],
                 'summary': result['summary'],
@@ -266,13 +291,11 @@ def upload_records():
                 'page_count': result.get('page_count'),
                 'paragraph_count': result.get('paragraph_count'),
                 'line_count': result.get('line_count'),
-            }
-            user_profiles[session_id].pop('business_data', None)
-            user_profiles[session_id].pop('financial_analysis', None)
-
+            })
             return jsonify({
                 'status': 'uploaded',
                 'type': 'document',
+                'filename': filename,
                 'summary': result['summary'],
                 'format': result['format'],
                 'word_count': result.get('word_count', 0),
@@ -282,6 +305,39 @@ def upload_records():
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         return jsonify({'error': f'Error processing file: {str(e)}'}), 400
+
+
+@app.route('/api/remove-file', methods=['POST'])
+def remove_file():
+    data = request.json
+    session_id = data.get('session_id', 'default')
+    filename = data.get('filename')
+    file_type = data.get('file_type')
+
+    profile = user_profiles.get(session_id, {})
+
+    if file_type == 'tabular':
+        profile['business_data_files'] = [f for f in profile.get('business_data_files', []) if f.get('filename') != filename]
+        _recompute_financial_analysis(profile)
+    elif file_type == 'document':
+        profile['uploaded_documents'] = [d for d in profile.get('uploaded_documents', []) if d.get('filename') != filename]
+
+    return jsonify({'status': 'removed'})
+
+
+@app.route('/api/get-files', methods=['GET'])
+def get_files():
+    session_id = request.args.get('session_id', 'default')
+    profile = user_profiles.get(session_id, {})
+    tabular = [
+        {'filename': f['filename'], 'summary': f['summary'], 'row_count': f['row_count'], 'file_type': 'tabular'}
+        for f in profile.get('business_data_files', [])
+    ]
+    documents = [
+        {'filename': d['filename'], 'summary': d['summary'], 'word_count': d.get('word_count', 0), 'file_type': 'document'}
+        for d in profile.get('uploaded_documents', [])
+    ]
+    return jsonify({'files': tabular + documents})
 
 
 @app.route('/api/profile/<session_id>', methods=['GET'])
@@ -628,17 +684,22 @@ def chat_all_stream():
 def get_charts():
     session_id = request.args.get('session_id', 'default')
     user_profile = user_profiles.get(session_id, {})
-    business_data = user_profile.get('business_data')
 
-    if not business_data:
+    business_data_files = user_profile.get('business_data_files', [])
+    if not business_data_files:
         return jsonify({'has_data': False, 'message': 'No financial data uploaded'})
 
-    rows = business_data.get('preview', [])
-    headers = business_data.get('headers', [])
+    all_headers = []
+    all_rows = []
+    for bdf in business_data_files:
+        for h in bdf.get('headers', []):
+            if h not in all_headers:
+                all_headers.append(h)
+        all_rows.extend(bdf.get('preview', []))
 
     try:
         from data.financial_analysis import get_chart_data
-        chart_data = get_chart_data(rows, headers)
+        chart_data = get_chart_data(all_rows, all_headers)
     except Exception as e:
         logger.error(f"Chart generation error: {e}")
         return jsonify({'has_data': False, 'message': 'Could not generate chart data'})
