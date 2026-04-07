@@ -704,6 +704,39 @@ def chat_all_stream():
     )
 
 
+def _fetch_industry_benchmarks(business_type):
+    """Parse benchmark row for the given business_type and return numeric values."""
+    if not business_type:
+        return None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT * FROM business_type_benchmarks WHERE business_type = %s LIMIT 1",
+            (business_type,)
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not row:
+            return None
+
+        margin_str = row.get('avg_profit_margin') or ''
+        numbers = re.findall(r'[\d.]+', margin_str)
+        pct_numbers = [float(n) for n in numbers if float(n) <= 100]
+        avg_margin = round(sum(pct_numbers) / len(pct_numbers), 1) if pct_numbers else None
+
+        return {
+            'business_type': row['business_type'],
+            'avg_net_margin': avg_margin,
+            'margin_label': margin_str,
+            'growth_outlook': row.get('growth_outlook', ''),
+        }
+    except Exception as e:
+        logger.warning(f"Could not fetch industry benchmarks: {e}")
+        return None
+
+
 @app.route('/api/charts', methods=['GET'])
 def get_charts():
     session_id = request.args.get('session_id', 'default')
@@ -727,6 +760,12 @@ def get_charts():
     except Exception as e:
         logger.error(f"Chart generation error: {e}")
         return jsonify({'has_data': False, 'message': 'Could not generate chart data'})
+
+    business_type = user_profile.get('business_type', '')
+    if business_type:
+        industry = _fetch_industry_benchmarks(business_type)
+        if industry:
+            chart_data['industry_benchmarks'] = industry
 
     return jsonify(chart_data)
 
