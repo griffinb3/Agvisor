@@ -446,14 +446,21 @@ def chat_all():
 
     responses.sort(key=lambda x: ADVISOR_ORDER.index(x['advisor_id']) if x['advisor_id'] in ADVISOR_ORDER else 99)
 
-    chart_data = None
+    advisor_chart_data = None
     for r in responses:
         clean_text, cdata = parse_chart_directive(r['response'], user_profile)
         r['response'] = clean_text
-        if cdata and chart_data is None:
-            chart_data = cdata
+        if cdata and advisor_chart_data is None:
+            advisor_chart_data = cdata
 
     summary = BoardChair.synthesize(message, responses, user_profile)
+
+    clean_summary, summary_chart_data = parse_chart_directive(summary, user_profile)
+    if summary_chart_data:
+        summary = clean_summary
+        chart_data = summary_chart_data
+    else:
+        chart_data = advisor_chart_data
 
     selected_titles = [active_advisors[aid]['title'] for aid in selected_ids if aid in active_advisors]
 
