@@ -6,8 +6,20 @@ uri = "file://static/agvisor_tractor_logo.png"
 type = "image"
 title = "agvisor tractor logo"
 
+[[generated]]
+id = "o9m-CTde0XJZqDOBeQN7d"
+uri = "file://static/agvisor_logo.png"
+type = "image"
+title = "agvisor green circle gold tractor logo"
+
 [[outputs]]
 id = "tBq_KDLLhgdWNKr0brgiI"
 uri = "file://static/agvisor_tractor_logo.png"
 type = "image"
 title = "Agvisor Tractor Logo"
+
+[[outputs]]
+id = "YcyYPNIhgvNkZfnRnvrbH"
+uri = "file://static/agvisor_logo.png"
+type = "image"
+title = "Agvisor Logo — Gold Tractor on Green"
