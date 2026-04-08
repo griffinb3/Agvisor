@@ -1,0 +1,13 @@
+uploads = []
+
+[[generated]]
+id = "tpQU_Iah7GiEz4hFYJ67V"
+uri = "file://static/agvisor_tractor_logo.png"
+type = "image"
+title = "agvisor tractor logo"
+
+[[outputs]]
+id = "tBq_KDLLhgdWNKr0brgiI"
+uri = "file://static/agvisor_tractor_logo.png"
+type = "image"
+title = "Agvisor Tractor Logo"
