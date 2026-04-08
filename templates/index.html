@@ -1164,9 +1164,9 @@
             const headerHtml = `<i class="fas fa-${advisorIcon}"></i><span>${escapeHtml(advisorTitle)}</span><span class="board-consulted">Direct</span>`;
             renderResponseBubble(responseDiv, headerHtml, data.response, null);
             containerDiv.appendChild(responseDiv);
-            if (data.chart_data) renderInlineChart(responseDiv, data.chart_data);
             checkAndAppendDashboard(data.response, containerDiv);
             chatMessages.appendChild(containerDiv);
+            if (data.chart_data) renderInlineChart(responseDiv, data.chart_data);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
@@ -1187,9 +1187,9 @@
                 `;
                 containerDiv.appendChild(responseDiv);
             });
-            if (chartData) renderInlineChart(containerDiv, chartData);
             checkAndAppendDashboard(allText, containerDiv);
             chatMessages.appendChild(containerDiv);
+            if (chartData) renderInlineChart(containerDiv, chartData);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
@@ -1213,10 +1213,9 @@
             summaryDiv.id = summaryId;
             containerDiv.appendChild(summaryDiv);
 
-            if (data.chart_data) renderInlineChart(summaryDiv, data.chart_data);
             checkAndAppendDashboard(summaryText, containerDiv);
-
             chatMessages.appendChild(containerDiv);
+            if (data.chart_data) renderInlineChart(summaryDiv, data.chart_data);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
