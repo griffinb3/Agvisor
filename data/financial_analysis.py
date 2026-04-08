@@ -477,6 +477,20 @@ def get_chart_data(rows, headers):
         return _get_generic_chart_data(rows, headers)
 
     has_year = 'year' in col_mapping
+
+    # Deduplicate by year and sort chronologically when year data is present
+    if has_year:
+        year_col = col_mapping['year']
+        seen_years = {}
+        for row in rows:
+            y = str(row.get(year_col, '')).strip()
+            if y and y.lower() not in ('none', 'null', ''):
+                seen_years[y] = row  # later rows overwrite earlier ones (keep last per year)
+        try:
+            rows = [v for _, v in sorted(seen_years.items(), key=lambda x: int(x[0]))]
+        except (ValueError, TypeError):
+            rows = list(seen_years.values())
+
     labels = []
     raw = {'revenue': [], 'expenses': [], 'net_income': [], 'gross_profit': []}
     margins = {'gross_margin': [], 'net_margin': [], 'operating_margin': []}
