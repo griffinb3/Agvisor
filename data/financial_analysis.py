@@ -642,6 +642,97 @@ def get_forecast_chart_data(rows, headers):
     }
 
 
+def get_comparison_forecast_chart_data(rows, headers, revenue_boost_pct=15.0, cost_reduction_pct=10.0):
+    """
+    Build a comparison forecast chart with two projected trajectories:
+      - Baseline: current trend via linear regression (no changes)
+      - Enhanced: projected trajectory if board recommendations are applied
+    Returns None if insufficient data.
+    """
+    base = get_chart_data(rows, headers)
+    if not base or not base.get('has_data'):
+        return None
+
+    labels = base.get('labels', [])
+    prediction_labels = base.get('prediction_labels', [])
+    datasets = base.get('datasets', {})
+    predictions = base.get('predictions', {})
+
+    if not prediction_labels or not predictions:
+        return None
+
+    n_hist = len(labels)
+    n_proj = len(prediction_labels)
+    all_labels = labels + prediction_labels
+
+    rev_boost = revenue_boost_pct / 100.0
+    cost_cut = cost_reduction_pct / 100.0
+
+    series = {}
+    projections = {}
+
+    for key in ['revenue', 'net_income', 'expenses']:
+        hist_vals = datasets.get(key, [])
+        proj_vals = predictions.get(key, [])
+        if not hist_vals or not any(v is not None for v in hist_vals) or not proj_vals:
+            continue
+
+        last_hist = next((v for v in reversed(hist_vals) if v is not None), None)
+        if last_hist is None:
+            continue
+
+        # Baseline: historical solid + projected dashed (current trajectory)
+        base_series = list(hist_vals) + [None] * n_proj
+        base_proj = [None] * n_hist + list(proj_vals)
+        base_proj[n_hist - 1] = last_hist
+
+        # Enhanced: same historical, but boosted projections
+        if key == 'revenue':
+            enh_proj_vals = [v * (1 + rev_boost) if v is not None else None for v in proj_vals]
+        elif key == 'expenses':
+            enh_proj_vals = [v * (1 - cost_cut) if v is not None else None for v in proj_vals]
+        elif key == 'net_income':
+            # Recompute from enhanced revenue minus enhanced expenses if available
+            rev_hist = datasets.get('revenue', [])
+            exp_hist = datasets.get('expenses', [])
+            rev_proj = predictions.get('revenue', [])
+            exp_proj = predictions.get('expenses', [])
+            enh_proj_vals = []
+            for i in range(n_proj):
+                r = rev_proj[i] if i < len(rev_proj) and rev_proj[i] is not None else None
+                e = exp_proj[i] if i < len(exp_proj) and exp_proj[i] is not None else None
+                if r is not None and e is not None:
+                    enh_proj_vals.append(r * (1 + rev_boost) - e * (1 - cost_cut))
+                elif proj_vals[i] is not None:
+                    # Fallback: boost net income directly
+                    enh_proj_vals.append(proj_vals[i] * (1 + rev_boost * 0.7 + cost_cut * 0.5))
+                else:
+                    enh_proj_vals.append(None)
+        else:
+            enh_proj_vals = proj_vals
+
+        enh_proj = [None] * n_hist + list(enh_proj_vals)
+        enh_proj[n_hist - 1] = last_hist
+
+        series[key] = base_series
+        projections[f'{key}_baseline'] = base_proj
+        projections[f'{key}_enhanced'] = enh_proj
+
+    if not series:
+        return None
+
+    return {
+        'has_data': True,
+        'chart_type': 'comparison_forecast',
+        'labels': all_labels,
+        'cutoff': n_hist,
+        'revenue_boost_pct': round(revenue_boost_pct, 1),
+        'cost_reduction_pct': round(cost_reduction_pct, 1),
+        'datasets': series,
+        'projections': projections,
+    }
+
+
 def parse_chart_directive(text, user_profile):
     """
     Find and extract a [CHART:type:col1,col2,...] directive from advisor response text.

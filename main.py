@@ -12,7 +12,7 @@ import psycopg2.extras
 
 logger = logging.getLogger(__name__)
 
-from data.financial_analysis import analyze_records, parse_chart_directive, get_forecast_chart_data
+from data.financial_analysis import analyze_records, parse_chart_directive, get_forecast_chart_data, get_comparison_forecast_chart_data
 
 from agents import (
     ADVISOR_CLASSES, BASE_ADVISORS, OPTIONAL_ADVISORS, ALL_ADVISORS,
@@ -460,10 +460,9 @@ def chat_all():
         'responses': responses,
         'summary': summary
     }
-    if _is_future_plans_question(message):
-        forecast = _build_forecast_chart(user_profile)
-        if forecast:
-            resp['chart_data'] = forecast
+    comparison = _build_comparison_chart(user_profile, summary)
+    if comparison:
+        resp['chart_data'] = comparison
     return jsonify(resp)
 
 
@@ -725,6 +724,65 @@ def _build_forecast_chart(user_profile):
         return get_forecast_chart_data(all_rows, all_headers)
     except Exception as e:
         logger.warning(f"Forecast chart generation failed: {e}")
+        return None
+
+
+def _extract_recommendation_impacts(summary_text):
+    """
+    Ask the AI to estimate the percentage revenue boost and cost reduction
+    achievable if the board's suggestions are fully implemented.
+    Returns (revenue_boost_pct, cost_reduction_pct) floats.
+    Falls back to conservative defaults on any error.
+    """
+    try:
+        from agents.base import get_openai_client
+        client = get_openai_client()
+        prompt = (
+            "You are a financial analyst. Based on this agricultural advisory board response, "
+            "estimate the realistic percentage improvements achievable if all suggestions are implemented. "
+            "Be conservative and realistic for agricultural businesses. "
+            "Respond with JSON only, no explanation:\n"
+            '{"revenue_boost_pct": <number 0-25>, "cost_reduction_pct": <number 0-20>}\n\n'
+            f"Board response:\n{summary_text[:1500]}"
+        )
+        result = client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=[{'role': 'user', 'content': prompt}],
+            max_tokens=60,
+            temperature=0.2,
+        )
+        import json as _json
+        raw = result.choices[0].message.content.strip()
+        raw = raw.strip('`').replace('json', '').strip()
+        data = _json.loads(raw)
+        rev = float(data.get('revenue_boost_pct', 12))
+        cost = float(data.get('cost_reduction_pct', 8))
+        rev = max(0.0, min(25.0, rev))
+        cost = max(0.0, min(20.0, cost))
+        return rev, cost
+    except Exception as e:
+        logger.warning(f"Impact extraction failed: {e}")
+        return 12.0, 8.0
+
+
+def _build_comparison_chart(user_profile, summary_text):
+    """Build a comparison forecast chart (baseline vs. with-recommendations) if data exists."""
+    if not user_profile:
+        return None
+    business_data_files = user_profile.get('business_data_files', [])
+    if not business_data_files:
+        return None
+    all_headers, all_rows = [], []
+    for bdf in business_data_files:
+        for h in bdf.get('headers', []):
+            if h not in all_headers:
+                all_headers.append(h)
+        all_rows.extend(bdf.get('preview', []))
+    try:
+        rev_boost, cost_cut = _extract_recommendation_impacts(summary_text)
+        return get_comparison_forecast_chart_data(all_rows, all_headers, rev_boost, cost_cut)
+    except Exception as e:
+        logger.warning(f"Comparison forecast chart generation failed: {e}")
         return None
 
 

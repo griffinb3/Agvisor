@@ -2385,24 +2385,40 @@
             if (!chartData || !chartData.has_data) return;
 
             const isForecast = !!chartData.is_forecast;
+            const isComparison = chartData.chart_type === 'comparison_forecast';
             const chartId = 'ic_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-            const typeLabel = isForecast ? 'Financial Forecast'
+            const typeLabel = isComparison ? 'Board Recommendations Impact'
+                : isForecast ? 'Financial Forecast'
                 : { line: 'Trend', bar: 'Comparison', doughnut: 'Composition' }[chartData.chart_type] || 'Chart';
-            const subLabel = isForecast
+            const revBoost = chartData.revenue_boost_pct || 0;
+            const costCut = chartData.cost_reduction_pct || 0;
+            const subLabel = isComparison
+                ? `+${revBoost}% revenue &amp; -${costCut}% costs if recommendations followed`
+                : isForecast
                 ? 'Current trajectory vs. projected — based on your uploaded data'
                 : 'based on your uploaded data';
+
+            const legendNote = isComparison
+                ? `<div class="forecast-legend-note">
+                     <span class="fc-solid">&#9644;</span> Historical &nbsp;&nbsp;
+                     <span class="fc-dashed" style="color:rgba(45,90,39,0.85)">&#9135;&#9135;</span> Current Path &nbsp;&nbsp;
+                     <span class="fc-dashed" style="color:rgba(201,162,39,1)">&#9135;&#9135;</span> With Board Recommendations
+                   </div>`
+                : isForecast
+                ? '<div class="forecast-legend-note"><span class="fc-solid">&#9644;</span> Historical &nbsp;&nbsp;<span class="fc-dashed">&#9135;&#9135;</span> Projected</div>'
+                : '';
 
             const wrap = document.createElement('div');
             wrap.className = 'inline-chart-container';
             wrap.innerHTML = `
                 <div class="inline-chart-header">
-                    <i class="fas fa-${isForecast ? 'chart-line' : 'chart-bar'}"></i>
+                    <i class="fas fa-chart-line"></i>
                     <span>${typeLabel} — ${subLabel}</span>
                     <button class="inline-chart-expand-btn" title="Open full dashboard" onclick="openDashboard()">
                         <i class="fas fa-external-link-alt"></i> Full Dashboard
                     </button>
                 </div>
-                ${isForecast ? '<div class="forecast-legend-note"><span class="fc-solid">&#9644;</span> Historical &nbsp;&nbsp;<span class="fc-dashed">&#9135;&#9135;</span> Projected</div>' : ''}
+                ${legendNote}
                 <div class="inline-chart-wrap">
                     <canvas id="${chartId}"></canvas>
                 </div>
@@ -2485,6 +2501,98 @@
                         plugins: {
                             legend: { ...commonLegend, labels: { ...commonLegend.labels, filter: item => !item.text.includes('(projected)') } },
                             tooltip: commonTooltip
+                        }
+                    }
+                });
+            } else if (isComparison) {
+                const labels = chartData.labels || [];
+                const cutoff = chartData.cutoff ?? Math.ceil(labels.length * 0.6);
+                const seriesKeys = Object.keys(chartData.datasets || {});
+                const GREEN = 'rgba(45,90,39,';
+                const GOLD = 'rgba(201,162,39,';
+                const metricColors = { revenue: GREEN, net_income: GREEN, expenses: 'rgba(231,76,60,' };
+                const datasets = [];
+
+                seriesKeys.forEach(key => {
+                    const baseColor = metricColors[key] || GREEN;
+                    const histData = chartData.datasets[key] || [];
+                    const baseProjData = (chartData.projections || {})[key + '_baseline'] || [];
+                    const enhProjData = (chartData.projections || {})[key + '_enhanced'] || [];
+
+                    // Historical solid line
+                    datasets.push({
+                        label: fmtLabel(key) + ' (historical)',
+                        data: histData,
+                        borderColor: baseColor + '1)',
+                        backgroundColor: baseColor + '0.06)',
+                        borderWidth: 2.5,
+                        fill: key === 'revenue',
+                        tension: 0.35,
+                        pointRadius: ctx => ctx.dataIndex < cutoff ? 3 : 0,
+                        pointStyle: 'circle',
+                    });
+
+                    // Baseline projection (dashed, same color but lighter)
+                    if (baseProjData.length) {
+                        datasets.push({
+                            label: fmtLabel(key) + ' — current path',
+                            data: baseProjData,
+                            borderColor: baseColor + '0.55)',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [6, 5],
+                            fill: false,
+                            tension: 0.35,
+                            pointRadius: ctx => ctx.dataIndex < cutoff ? 0 : 3,
+                            pointStyle: 'triangle',
+                        });
+                    }
+
+                    // Enhanced projection (dashed gold, thicker — only for revenue and net_income)
+                    if (enhProjData.length && key !== 'expenses') {
+                        datasets.push({
+                            label: fmtLabel(key) + ' — with recommendations',
+                            data: enhProjData,
+                            borderColor: GOLD + '1)',
+                            backgroundColor: GOLD + '0.08)',
+                            borderWidth: 2.5,
+                            borderDash: [8, 4],
+                            fill: false,
+                            tension: 0.35,
+                            pointRadius: ctx => ctx.dataIndex < cutoff ? 0 : 4,
+                            pointStyle: 'rectRot',
+                        });
+                    }
+                });
+
+                const compTooltip = {
+                    callbacks: {
+                        label: ctx => {
+                            const lbl = ctx.dataset.label || '';
+                            const val = fmtVal(ctx.raw);
+                            return val ? `${lbl}: ${val}` : null;
+                        },
+                        filter: item => item.raw !== null && item.raw !== undefined
+                    }
+                };
+                chart = new Chart(canvas, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: {
+                            ...commonScales,
+                            x: { ...commonScales.x, ticks: { ...commonScales.x.ticks, maxRotation: 0 } }
+                        },
+                        plugins: {
+                            legend: {
+                                ...commonLegend,
+                                labels: {
+                                    ...commonLegend.labels,
+                                    filter: item => !item.text.includes('(historical)')
+                                }
+                            },
+                            tooltip: compTooltip
                         }
                     }
                 });
