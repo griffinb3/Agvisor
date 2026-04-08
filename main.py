@@ -221,6 +221,69 @@ def save_profile():
     return jsonify({'status': 'saved', 'profile': user_profiles[session_id]})
 
 
+def _extract_financial_from_document(text, filename):
+    """
+    Use AI to extract structured annual financial data from document text (PDF, Word, etc).
+    Returns dict with headers and preview rows if successful, None otherwise.
+    """
+    try:
+        import json as _json
+        from agents.base import get_openai_client
+        client = get_openai_client()
+
+        prompt = (
+            "You are a financial data extractor. Extract annual financial data from this document.\n"
+            "Return a JSON object with TWO keys:\n"
+            "  'headers': array of column names — ALWAYS include 'year' if multiple periods exist. "
+            "Use only these names: year, revenue, expenses, net_income, gross_profit, cogs, "
+            "operating_income, assets, liabilities, equity, current_assets, current_liabilities, "
+            "debt, depreciation, interest, ebitda\n"
+            "  'rows': array of objects, one per year/period. Use the header names as keys. "
+            "Values must be plain numbers as strings (no $, no commas). "
+            "Parentheses mean negative (e.g. (50000) → '-50000').\n"
+            "If no financial data is found, return null.\n\n"
+            f"Document: {filename}\n\nText:\n{text[:4000]}"
+        )
+
+        result = client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=[{'role': 'user', 'content': prompt}],
+            max_tokens=1500,
+            temperature=0,
+        )
+
+        raw = result.choices[0].message.content.strip()
+        if raw.startswith('```'):
+            raw = raw[raw.find('\n')+1:]
+            raw = raw[:raw.rfind('```')].strip()
+
+        if not raw or raw.lower() == 'null':
+            return None
+
+        data = _json.loads(raw)
+        if not data or not isinstance(data, dict):
+            return None
+
+        headers = data.get('headers', [])
+        rows = data.get('rows', [])
+
+        if not headers or not rows:
+            return None
+
+        normalized = []
+        for row in rows:
+            normalized.append({k: str(v) if v is not None else '' for k, v in row.items()})
+
+        return {
+            'headers': headers,
+            'preview': normalized[:20],
+            'row_count': len(normalized),
+        }
+    except Exception as e:
+        logger.warning(f"Financial extraction from document '{filename}' failed: {e}")
+        return None
+
+
 def _recompute_financial_analysis(profile):
     files = profile.get('business_data_files', [])
     if not files:
@@ -292,6 +355,23 @@ def upload_records():
                 'paragraph_count': result.get('paragraph_count'),
                 'line_count': result.get('line_count'),
             })
+            # Also try to extract tabular financial data for dashboard charts
+            extracted = _extract_financial_from_document(result['text'], filename)
+            financial_extracted = False
+            extracted_periods = 0
+            if extracted and extracted.get('headers') and extracted.get('preview'):
+                profile['business_data_files'] = [f for f in profile.get('business_data_files', []) if f.get('filename') != filename]
+                profile['business_data_files'].append({
+                    'filename': filename,
+                    'summary': f"Financial data extracted from {filename} — {extracted['row_count']} period(s)",
+                    'headers': extracted['headers'],
+                    'preview': extracted['preview'],
+                    'row_count': extracted['row_count'],
+                    'source': 'extracted',
+                })
+                _recompute_financial_analysis(profile)
+                financial_extracted = True
+                extracted_periods = extracted['row_count']
             return jsonify({
                 'status': 'uploaded',
                 'type': 'document',
@@ -300,11 +380,56 @@ def upload_records():
                 'format': result['format'],
                 'word_count': result.get('word_count', 0),
                 'page_count': result.get('page_count'),
+                'financial_extracted': financial_extracted,
+                'extracted_periods': extracted_periods,
             })
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         return jsonify({'error': f'Error processing file: {str(e)}'}), 400
+
+
+@app.route('/api/reprocess-documents', methods=['POST'])
+def reprocess_documents():
+    """Re-run AI financial extraction on all uploaded documents and add results to business_data_files."""
+    data = request.json
+    session_id = data.get('session_id', 'default')
+    profile = user_profiles.get(session_id, {})
+    docs = profile.get('uploaded_documents', [])
+
+    if not docs:
+        return jsonify({'status': 'no_documents', 'extracted': 0})
+
+    extracted_count = 0
+    periods_total = 0
+    for doc in docs:
+        filename = doc.get('filename', '')
+        text = doc.get('text', '')
+        if not text:
+            continue
+        result = _extract_financial_from_document(text, filename)
+        if result and result.get('headers') and result.get('preview'):
+            profile['business_data_files'] = [f for f in profile.get('business_data_files', []) if f.get('filename') != filename]
+            profile['business_data_files'].append({
+                'filename': filename,
+                'summary': f"Financial data extracted from {filename} — {result['row_count']} period(s)",
+                'headers': result['headers'],
+                'preview': result['preview'],
+                'row_count': result['row_count'],
+                'source': 'extracted',
+            })
+            extracted_count += 1
+            periods_total += result['row_count']
+
+    if extracted_count:
+        _recompute_financial_analysis(profile)
+
+    return jsonify({
+        'status': 'done',
+        'extracted': extracted_count,
+        'periods': periods_total,
+        'has_data': extracted_count > 0,
+    })
 
 
 @app.route('/api/remove-file', methods=['POST'])

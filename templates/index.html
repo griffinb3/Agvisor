@@ -257,7 +257,10 @@
         <div class="dashboard-no-data" id="dashboardNoData" style="display:none;">
             <i class="fas fa-upload"></i>
             <p>No financial data available</p>
-            <span>Upload a CSV or Excel file with your financial records to see charts here.</span>
+            <span>Upload a CSV or Excel file — or if you've uploaded PDF/Word financial statements, click below to extract chart data from them.</span>
+            <button class="extract-docs-btn" id="extractDocsBtn" onclick="reprocessDocuments()" style="display:none;">
+                <i class="fas fa-magic"></i> Extract Data from Uploaded Documents
+            </button>
         </div>
     </div>
 
@@ -1445,8 +1448,13 @@
                 if (data.type === 'tabular') {
                     showFilesStatus(`${file.name} — ${data.row_count} records loaded`, 'success');
                     setHasFinancialData(true);
+                    dashboardDataCache = null;
+                } else if (data.financial_extracted) {
+                    showFilesStatus(`${file.name} — financial data extracted (${data.extracted_periods} period${data.extracted_periods !== 1 ? 's' : ''})`, 'success');
+                    setHasFinancialData(true);
+                    dashboardDataCache = null;
                 } else {
-                    showFilesStatus(`${file.name} — document processed`, 'success');
+                    showFilesStatus(`${file.name} — document processed (no chart data found)`, 'success');
                 }
                 loadFilesList();
                 updateFilesBadge();
@@ -2035,6 +2043,12 @@
                 if (!data.has_data) {
                     noDataEl.style.display = 'flex';
                     bodyEl.style.display = 'none';
+                    // Show extract button if user has uploaded documents
+                    const filesResp = await fetch(`/api/get-files?session_id=${sessionId}`);
+                    const filesData = await filesResp.json();
+                    const hasDocs = (filesData.files || []).some(f => f.file_type === 'document');
+                    const extractBtn = document.getElementById('extractDocsBtn');
+                    if (extractBtn) extractBtn.style.display = hasDocs ? 'inline-flex' : 'none';
                     return;
                 }
                 noDataEl.style.display = 'none';
@@ -2046,6 +2060,34 @@
                 renderCharts(data);
             } catch (err) {
                 console.error('Dashboard load error:', err);
+            }
+        }
+
+        async function reprocessDocuments() {
+            const btn = document.getElementById('extractDocsBtn');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Extracting...'; }
+            try {
+                const resp = await fetch('/api/reprocess-documents', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+                const data = await resp.json();
+                if (data.has_data) {
+                    setHasFinancialData(true);
+                    dashboardDataCache = null;
+                    await loadChartData();
+                } else {
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-magic"></i> Extract Data from Uploaded Documents'; }
+                    const noDataEl = document.getElementById('dashboardNoData');
+                    if (noDataEl) {
+                        const span = noDataEl.querySelector('span');
+                        if (span) span.textContent = 'Could not extract financial data from the uploaded documents. Try uploading a CSV or Excel file with clearly labelled columns.';
+                    }
+                }
+            } catch (err) {
+                console.error('Reprocess error:', err);
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-magic"></i> Extract Data from Uploaded Documents'; }
             }
         }
 

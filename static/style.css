@@ -2564,6 +2564,32 @@ body {
 
 .dashboard-no-data span {
     font-size: 0.85rem;
+    max-width: 380px;
+}
+
+.extract-docs-btn {
+    margin-top: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--primary-green);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.55rem 1.1rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.extract-docs-btn:hover:not(:disabled) {
+    background: var(--light-green);
+}
+
+.extract-docs-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
 }
 
 .inline-dashboard-btn {
