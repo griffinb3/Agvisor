@@ -2512,6 +2512,16 @@ body {
     display: flex;
 }
 
+#panel-line {
+    overflow-y: auto;
+}
+
+#panel-line > .chart-wrap {
+    flex: none;
+    height: 280px;
+    min-height: 280px;
+}
+
 .chart-legend-note {
     font-size: 0.78rem;
     color: var(--text-muted);
