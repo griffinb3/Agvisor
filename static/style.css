@@ -3011,3 +3011,25 @@ body {
     height: 220px;
     padding: 0.5rem 0.75rem 0.75rem;
 }
+
+.forecast-legend-note {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.3rem 0.9rem 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.fc-solid {
+    color: rgba(45, 90, 39, 0.9);
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.fc-dashed {
+    color: rgba(45, 90, 39, 0.5);
+    font-size: 0.85rem;
+    letter-spacing: -2px;
+    line-height: 1;
+}

@@ -12,7 +12,7 @@ import psycopg2.extras
 
 logger = logging.getLogger(__name__)
 
-from data.financial_analysis import analyze_records, parse_chart_directive
+from data.financial_analysis import analyze_records, parse_chart_directive, get_forecast_chart_data
 
 from agents import (
     ADVISOR_CLASSES, BASE_ADVISORS, OPTIONAL_ADVISORS, ALL_ADVISORS,
@@ -362,16 +362,16 @@ def chat():
     if 'Error' in result.get('response', ''):
         return jsonify({'error': result['response']}), 500
 
-    response_text, chart_data = parse_chart_directive(result['response'], user_profile)
-
     resp = {
-        'response': response_text,
+        'response': result['response'],
         'advisor': {
             'title': result['title']
         }
     }
-    if chart_data:
-        resp['chart_data'] = chart_data
+    if _is_future_plans_question(message):
+        forecast = _build_forecast_chart(user_profile)
+        if forecast:
+            resp['chart_data'] = forecast
     return jsonify(resp)
 
 
@@ -392,11 +392,11 @@ def chat_all():
 
     if specific_advisor:
         result = get_advisor_response(specific_advisor, message, session_id, user_profile)
-        clean_text, chart_data = parse_chart_directive(result['response'], user_profile)
-        result['response'] = clean_text
         single_resp = {'mode': 'single', 'responses': [result]}
-        if chart_data:
-            single_resp['chart_data'] = chart_data
+        if _is_future_plans_question(message):
+            forecast = _build_forecast_chart(user_profile)
+            if forecast:
+                single_resp['chart_data'] = forecast
         return jsonify(single_resp)
 
     routing_rationale = None
@@ -446,21 +446,7 @@ def chat_all():
 
     responses.sort(key=lambda x: ADVISOR_ORDER.index(x['advisor_id']) if x['advisor_id'] in ADVISOR_ORDER else 99)
 
-    advisor_chart_data = None
-    for r in responses:
-        clean_text, cdata = parse_chart_directive(r['response'], user_profile)
-        r['response'] = clean_text
-        if cdata and advisor_chart_data is None:
-            advisor_chart_data = cdata
-
     summary = BoardChair.synthesize(message, responses, user_profile)
-
-    clean_summary, summary_chart_data = parse_chart_directive(summary, user_profile)
-    if summary_chart_data:
-        summary = clean_summary
-        chart_data = summary_chart_data
-    else:
-        chart_data = advisor_chart_data
 
     selected_titles = [active_advisors[aid]['title'] for aid in selected_ids if aid in active_advisors]
 
@@ -474,8 +460,10 @@ def chat_all():
         'responses': responses,
         'summary': summary
     }
-    if chart_data:
-        resp['chart_data'] = chart_data
+    if _is_future_plans_question(message):
+        forecast = _build_forecast_chart(user_profile)
+        if forecast:
+            resp['chart_data'] = forecast
     return jsonify(resp)
 
 
@@ -702,6 +690,42 @@ def chat_all_stream():
         mimetype='text/event-stream',
         headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'}
     )
+
+
+_FUTURE_PLANS_KEYWORDS = [
+    'expand', 'expansion', 'future', 'next year', 'next season', 'next few years',
+    'planning', 'plan ahead', 'long-term', 'long term', 'roadmap', 'trajectory',
+    'forecast', 'projection', 'project', 'grow', 'growth', 'scaling', 'scale up',
+    'new operation', 'diversify', 'add a', 'increase production', 'what if i',
+    'what if we', 'should i invest', 'should we invest', 'thinking about',
+    'considering', 'looking to', 'looking at', 'down the road', 'strategic',
+    '5 year', '3 year', '10 year', 'five year', 'three year', 'ten year',
+]
+
+
+def _is_future_plans_question(message):
+    msg = message.lower()
+    return any(kw in msg for kw in _FUTURE_PLANS_KEYWORDS)
+
+
+def _build_forecast_chart(user_profile):
+    """Return a forecast chart_data dict if the user has sufficient tabular data, else None."""
+    if not user_profile:
+        return None
+    business_data_files = user_profile.get('business_data_files', [])
+    if not business_data_files:
+        return None
+    all_headers, all_rows = [], []
+    for bdf in business_data_files:
+        for h in bdf.get('headers', []):
+            if h not in all_headers:
+                all_headers.append(h)
+        all_rows.extend(bdf.get('preview', []))
+    try:
+        return get_forecast_chart_data(all_rows, all_headers)
+    except Exception as e:
+        logger.warning(f"Forecast chart generation failed: {e}")
+        return None
 
 
 def _fetch_industry_benchmarks(business_type):

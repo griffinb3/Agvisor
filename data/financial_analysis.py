@@ -575,6 +575,59 @@ def get_chart_data(rows, headers):
     }
 
 
+def get_forecast_chart_data(rows, headers):
+    """
+    Build a forecast inline chart showing historical data (solid) and projected
+    data (dashed) for revenue, expenses, and net income.
+    Returns None if insufficient data for projections.
+    """
+    base = get_chart_data(rows, headers)
+    if not base or not base.get('has_data'):
+        return None
+
+    labels = base.get('labels', [])
+    prediction_labels = base.get('prediction_labels', [])
+    datasets = base.get('datasets', {})
+    predictions = base.get('predictions', {})
+
+    if not prediction_labels or not predictions:
+        return None
+
+    all_labels = labels + prediction_labels
+    n_hist = len(labels)
+    chart_datasets = {}
+    chart_projections = {}
+
+    for key in ['revenue', 'expenses', 'net_income']:
+        hist_vals = datasets.get(key, [])
+        proj_vals = predictions.get(key, [])
+        if not hist_vals or not any(v is not None for v in hist_vals) or not proj_vals:
+            continue
+
+        hist_series = list(hist_vals) + [None] * len(proj_vals)
+        last_hist = next((v for v in reversed(hist_vals) if v is not None), None)
+        proj_series = [None] * n_hist + proj_vals
+        if last_hist is not None:
+            proj_series[n_hist - 1] = last_hist
+
+        chart_datasets[key] = hist_series
+        chart_projections[key] = proj_series
+
+    if not chart_datasets:
+        return None
+
+    return {
+        'has_data': True,
+        'is_forecast': True,
+        'chart_type': 'line',
+        'inline': True,
+        'labels': all_labels,
+        'datasets': chart_datasets,
+        'projections': chart_projections,
+        'cutoff': n_hist - 1,
+    }
+
+
 def parse_chart_directive(text, user_profile):
     """
     Find and extract a [CHART:type:col1,col2,...] directive from advisor response text.
